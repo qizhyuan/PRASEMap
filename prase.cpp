@@ -9,7 +9,10 @@
 #include <stack>
 #include <set>
 #include <queue>
-#include <atomic>
+// #include <atomic>
+#include <random>
+#include <algorithm>
+
 namespace py = pybind11;
 
 class KG {
@@ -23,6 +26,7 @@ public:
     void test();
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_tail_pairs_ptr(uint64_t);
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_head_pairs_ptr(uint64_t);
+    std::set<uint64_t>& get_ent_set();
     double get_functionality(uint64_t);
     double get_inv_functionality(uint64_t);
 private:
@@ -98,6 +102,10 @@ std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_head_pairs_ptr(uint64_t tai
     return &t_r_h_mp[tail_id];
 }
 
+std::set<uint64_t>& KG::get_ent_set() {
+    return ent_set;
+}
+
 double KG::get_functionality(uint64_t rel_id) {
     double functionality = 0.0;
     if (functionality_mp.count(rel_id)) {
@@ -171,7 +179,7 @@ public:
     void insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>&);
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
-    void update_rel_eqv();
+    void update_rel_eqv(int);
     void update_ent_eqv();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
@@ -240,7 +248,7 @@ void PARISEquiv::insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>& r
 void PARISEquiv::insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& rel_deno_map) {
     for (auto iter = rel_deno_map.begin(); iter != rel_deno_map.end(); ++iter) {
         uint64_t relation = iter -> first;
-        std::unordered_map<uint64_t, double> relation_cp_map = iter -> second;
+        std::unordered_map<uint64_t, double>& relation_cp_map = iter -> second;
         
         for (auto sub_iter = relation_cp_map.begin(); sub_iter != relation_cp_map.end(); ++sub_iter) {
             uint64_t relation_cp = sub_iter -> first;
@@ -257,7 +265,7 @@ void PARISEquiv::insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unord
 void PARISEquiv::insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& ent_eqv_result) {
     for (auto iter = ent_eqv_result.begin(); iter != ent_eqv_result.end(); ++iter) {
         uint64_t ent_id = iter -> first;
-        std::unordered_map<uint64_t, double> ent_cp_map = iter -> second;
+        std::unordered_map<uint64_t, double>& ent_cp_map = iter -> second;
 
         for (auto sub_iter = ent_cp_map.begin(); sub_iter != ent_cp_map.end(); ++sub_iter) {
             uint64_t end_cp_id = sub_iter -> first;
@@ -270,8 +278,37 @@ void PARISEquiv::insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unorde
     }
 }
 
-void PARISEquiv::update_rel_eqv() {
+void PARISEquiv::update_rel_eqv(int norm_const) {
+    rel_eqv_mp.clear();
+    
+    std::function<double(uint64_t)> get_rel_norm = [&](uint64_t rel_id) {
+        double norm = 0.0;
+        if (ongoing_rel_norm.count(rel_id)) {
+            norm = ongoing_rel_norm[rel_id];
+        }
+        return norm;
+    };
 
+    for (auto iter = ongoing_rel_deno.begin(); iter != ongoing_rel_deno.end(); ++iter) {
+        uint64_t relation = iter -> first;
+        std::unordered_map<uint64_t, double>& rel_cp_map = iter -> second;
+        double norm = get_rel_norm(relation) + norm_const;
+
+        for (auto sub_iter = rel_cp_map.begin(); sub_iter != rel_cp_map.end(); ++sub_iter) {
+            uint64_t relation_cp = sub_iter -> first;
+            double prob = sub_iter -> second / norm;
+            if (prob <= 0) {
+                continue;
+            }
+            if (prob > 1.0) {
+                prob = 1.0;
+            }
+            if (!rel_eqv_mp.count(relation)) {
+                rel_eqv_mp[relation] = std::unordered_map<uint64_t, double>();
+            }
+            rel_eqv_mp[relation][relation_cp] = prob;
+        }
+    }
 }
 
 void PARISEquiv::update_ent_eqv() {
@@ -315,6 +352,10 @@ struct PARISParams {
     double ENT_REGISTER_THRESHOLD;
     int INIT_ITERATION;
     int ENT_CANDIDATE_NUM;
+    int SMOOTH_NORM;
+    int THREAD_NUM;
+    int MAX_THREAD_NUM;
+    int MIN_THREAD_NUM;
     PARISParams();
 };
 
@@ -330,6 +371,10 @@ PARISParams::PARISParams() {
     ENT_REGISTER_THRESHOLD = 0.01;
     INIT_ITERATION = 2;
     ENT_CANDIDATE_NUM = 3;
+    SMOOTH_NORM = 10;
+    THREAD_NUM = std::thread::hardware_concurrency();
+    MAX_THREAD_NUM = INT_MAX;
+    MIN_THREAD_NUM = 1;
 }
 
 
@@ -351,7 +396,9 @@ private:
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
     double get_filtered_prob(uint64_t, uint64_t, double);
     bool is_rel_init();
+    static void one_iteration_one_way_per_thread(PRModule*, std::queue<uint64_t> &, KG*, KG*, bool);
     void one_iteration_one_way(std::queue<uint64_t> &, KG*, KG*, bool);
+    void one_iteration();
 };
 
 PRModule::PRModule(KG &kg_a, KG &kg_b) {
@@ -413,7 +460,7 @@ bool PRModule::is_rel_init() {
     return false;
 }
 
-void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, KG* kg_r, bool ent_align = true) {
+void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint64_t>& ent_queue, KG* kg_l, KG* kg_r, bool ent_align) {
     uint64_t ent_id;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ent_eqv_result;
     std::unordered_map<uint64_t, double> ent_ongoing_eqv;
@@ -424,9 +471,9 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
         std::unordered_map<uint64_t, double>* map_ptr;
 
         if (ent_eqv_result.count(id)) {
-            map_ptr = &ent_eqv_result[id];
+            map_ptr = &(ent_eqv_result[id]);
         } else {
-            map_ptr = paris_eqv -> get_ent_cp_map_ptr(kg_l, id);
+            map_ptr = _this -> paris_eqv -> get_ent_cp_map_ptr(kg_l, id);
         }
 
         return map_ptr;
@@ -441,16 +488,16 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
     };
 
     std::function<void(uint64_t, uint64_t, uint64_t, double)> register_ongoing_ent_eqv = [&](uint64_t rel_id, uint64_t rel_cp_id, uint64_t head_cp_id, double tail_cp_eqv) {
-        double rel_eqv_sub = paris_eqv ->get_rel_equiv (rel_id, rel_cp_id);
-        double rel_eqv_sup = paris_eqv ->get_rel_equiv (rel_cp_id, rel_id);
+        double rel_eqv_sub = _this -> paris_eqv ->get_rel_equiv (rel_id, rel_cp_id);
+        double rel_eqv_sup = _this -> paris_eqv ->get_rel_equiv (rel_cp_id, rel_id);
 
-        rel_eqv_sub /= paris_params -> PENALTY_VALUE;
-        rel_eqv_sup /= paris_params -> PENALTY_VALUE;
+        rel_eqv_sub /= _this -> paris_params -> PENALTY_VALUE;
+        rel_eqv_sup /= _this -> paris_params -> PENALTY_VALUE;
 
-        if (rel_eqv_sub < paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < paris_params -> REL_EQV_THRESHOLD) {
-            if (is_rel_init()) {
-                rel_eqv_sup = paris_params -> REL_EQV_THRESHOLD;
-                rel_eqv_sub = paris_params -> REL_EQV_THRESHOLD;
+        if (rel_eqv_sub < _this -> paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < _this -> paris_params -> REL_EQV_THRESHOLD) {
+            if (_this -> is_rel_init()) {
+                rel_eqv_sup = _this -> paris_params -> REL_EQV_THRESHOLD;
+                rel_eqv_sub = _this -> paris_params -> REL_EQV_THRESHOLD;
             } else {
                 return;
             }
@@ -469,7 +516,7 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
             factor *= (1.0 - rel_eqv_sup * inv_functionality_l * tail_cp_eqv);
         }
 
-        if (1.0 - factor >= paris_params -> REL_EQV_FACTOR_THRESHOLD) {
+        if (1.0 - factor >= _this -> paris_params -> REL_EQV_FACTOR_THRESHOLD) {
             if (!ent_ongoing_eqv.count(head_cp_id)) {
                 ent_ongoing_eqv[head_cp_id] = 1.0;
             }
@@ -479,15 +526,15 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
     };
 
     while (!ent_queue.empty()) {
-        queue_lock.lock();
+        _this -> queue_lock.lock();
         if (!ent_queue.empty()) {
             ent_id = ent_queue.front();
             ent_queue.pop();
         } else {
-            queue_lock.unlock();
+            _this -> queue_lock.unlock();
             continue;
         }
-        queue_lock.unlock();
+        _this -> queue_lock.unlock();
 
         std::set<std::pair<uint64_t, uint64_t>>* rel_tail_pairs_ptr =  kg_l -> get_rel_tail_pairs_ptr(ent_id);
         std::unordered_map<uint64_t, double>* head_cp_ptr = get_cp_map_ptr(ent_id);
@@ -502,15 +549,15 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
 
             for (auto tail_iter = tail_cp_ptr -> begin(); tail_iter != tail_cp_ptr -> end(); ++tail_iter) {
                 uint64_t tail_cp = tail_iter -> first;
-                double tail_eqv_prob = get_filtered_prob(tail, tail_cp, tail_iter -> second);
+                double tail_eqv_prob = _this -> get_filtered_prob(tail, tail_cp, tail_iter -> second);
 
-                if (tail_eqv_prob < paris_params -> ENT_EQV_THRESHOLD) {
+                if (tail_eqv_prob < _this -> paris_params -> ENT_EQV_THRESHOLD) {
                     continue;
                 }
 
                 for (auto head_iter = head_cp_ptr -> begin(); head_iter != head_cp_ptr -> end(); ++head_iter) {
                     uint64_t head_cp = head_iter -> first;
-                    double head_eqv_prob = get_filtered_prob(ent_id, head_cp, head_iter -> second);
+                    double head_eqv_prob = _this -> get_filtered_prob(ent_id, head_cp, head_iter -> second);
                     rel_ongoing_norm_factor *= (1.0 - head_eqv_prob * tail_eqv_prob);
                 }
 
@@ -524,7 +571,7 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
                     uint64_t relation_cp_candidate = sub_iter -> first;
 
                     if (head_cp_ptr -> count(head_cp_candidate)) {
-                        double eqv_prob = get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
+                        double eqv_prob = _this -> get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
                         register_ongoing_rel_eqv_deno(rel_ongoing_deno_factor_map, relation_cp_candidate, tail_eqv_prob * eqv_prob);
                     }
                     
@@ -557,18 +604,18 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
             std::stack<std::pair<uint64_t, double>> st1, st2;
             for (auto iter = ent_ongoing_eqv.begin(); iter != ent_ongoing_eqv.end(); ++iter) {
                 uint64_t ent_cp_candidate = iter -> first;
-                double ent_cp_eqv = get_filtered_prob(ent_id, ent_cp_candidate, 1.0 - (iter -> second));
+                double ent_cp_eqv = _this -> get_filtered_prob(ent_id, ent_cp_candidate, 1.0 - (iter -> second));
                 
                 while (!st1.empty() && st1.top().second < ent_cp_eqv) {
                     st2.push(st1.top());
                     st1.pop();
                 }
                 
-                if (st1.size() < paris_params -> ENT_CANDIDATE_NUM) {
+                if (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM) {
                     st1.push(std::make_pair(ent_cp_candidate, ent_cp_eqv));
                 }
                 
-                while (st1.size() < paris_params -> ENT_CANDIDATE_NUM && !st2.empty()) {
+                while (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM && !st2.empty()) {
                     st1.push(st2.top());
                     st2.pop();
                 }
@@ -594,25 +641,71 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
 
     while (!(has_updated_rel_norm && has_updated_rel_deno && has_update_ent_eqv)) {
         if (!has_updated_rel_norm) {
-            if (paris_eqv -> rel_norm_lock.try_lock()) {
+            if (_this -> paris_eqv -> rel_norm_lock.try_lock()) {
                 has_updated_rel_norm = true;
-                paris_eqv -> insert_ongoing_rel_norm(rel_ongoing_norm_eqv);
-                paris_eqv -> rel_norm_lock.unlock();
+                _this -> paris_eqv -> insert_ongoing_rel_norm(rel_ongoing_norm_eqv);
+                _this -> paris_eqv -> rel_norm_lock.unlock();
             }
         } else if (!has_updated_rel_deno) {
-            if (paris_eqv -> rel_deno_lock.try_lock()) {
+            if (_this -> paris_eqv -> rel_deno_lock.try_lock()) {
                 has_updated_rel_deno = true;
-                paris_eqv -> insert_ongoing_rel_deno(rel_ongoing_deno_eqv);
-                paris_eqv -> rel_deno_lock.unlock();
+                _this -> paris_eqv -> insert_ongoing_rel_deno(rel_ongoing_deno_eqv);
+                _this -> paris_eqv -> rel_deno_lock.unlock();
             }
         } else if (!has_update_ent_eqv) {
-            if (paris_eqv -> ent_eqv_lock.try_lock()) {
+            if (_this -> paris_eqv -> ent_eqv_lock.try_lock()) {
                 has_update_ent_eqv = true;
-                paris_eqv -> insert_ent_equiv(ent_eqv_result);
-                paris_eqv -> ent_eqv_lock.unlock();
+                _this -> paris_eqv -> insert_ongoing_ent_eqv(ent_eqv_result);
+                _this -> paris_eqv -> ent_eqv_lock.unlock();
             }
         }
     }
+
+}
+
+void PRModule::one_iteration_one_way(std::queue<uint64_t> &q, KG* kg_l, KG* kg_r, bool ent_align) {
+    int thread_num = std::max(std::min(paris_params -> THREAD_NUM, paris_params -> MAX_THREAD_NUM), paris_params -> MIN_THREAD_NUM);
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < thread_num; ++i) {
+        threads.push_back(std::thread(&PRModule::one_iteration_one_way_per_thread, this, std::ref(q), kg_l, kg_r, ent_align));
+    }
+
+    for (int i = 0; i < thread_num; ++i) {
+        threads[i].join();
+    }
+
+}
+
+void PRModule::one_iteration() {
+    ++iteration;
+
+    std::queue<uint64_t> ent_queue;
+    std::function<void(KG *)> set_ent_queue = [&](KG* curr_kg) {
+        while (!ent_queue.empty()) {
+            ent_queue.pop();
+        }
+        
+        std::set<uint64_t>& ent_set = curr_kg -> get_ent_set();
+        std::vector<uint64_t> ents = std::vector<uint64_t>(ent_set.begin(), ent_set.end());
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(ents.begin(), ents.end(), g);
+
+        for (uint64_t ent : ents) {
+            ent_queue.push(ent);
+        }
+    };
+
+    set_ent_queue(kg_a);
+    one_iteration_one_way(ent_queue, kg_a, kg_b, true);
+
+    paris_eqv -> update_ent_eqv();
+
+    set_ent_queue(kg_b);
+    one_iteration_one_way(ent_queue, kg_b, kg_a, false);
+
+    paris_eqv -> update_rel_eqv(paris_params -> SMOOTH_NORM);
 
 }
 

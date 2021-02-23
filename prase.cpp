@@ -12,6 +12,7 @@
 // #include <atomic>
 #include <random>
 #include <algorithm>
+#include <functional>
 
 namespace py = pybind11;
 
@@ -168,6 +169,13 @@ void KG::init_functionalities() {
 
 }
 
+struct EquivPair {
+    uint64_t id;
+    uint64_t cp_id;
+    double prob;
+    EquivPair(uint64_t id, uint64_t cp_id, double prob) : id(id), cp_id(cp_id), prob(prob) {};
+};
+
 class PARISEquiv {
 public:
     void insert_lite_equiv(uint64_t, uint64_t, double);
@@ -181,6 +189,7 @@ public:
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void update_rel_eqv(int);
     void update_ent_eqv();
+    void reset_ongoing_mp();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
     std::mutex ent_eqv_lock;
@@ -312,7 +321,46 @@ void PARISEquiv::update_rel_eqv(int norm_const) {
 }
 
 void PARISEquiv::update_ent_eqv() {
+    std::vector<EquivPair> new_ent_eqv_pairs;
+    std::unordered_set<uint64_t> visited;
 
+    for (auto iter = ongoing_ent_eqv_mp.begin(); iter != ongoing_ent_eqv_mp.end(); ++iter) {
+        uint64_t id = iter -> first;
+        std::unordered_map<uint64_t, double>& cp_map = iter -> second;
+
+        for (auto sub_iter = cp_map.begin(); sub_iter != cp_map.end(); ++sub_iter) {
+            uint64_t cp_id = sub_iter -> first;
+            double prob = sub_iter -> second;
+            EquivPair eqv_tuple(id, cp_id, prob);
+            new_ent_eqv_pairs.push_back(eqv_tuple);
+        }
+    }
+
+    std::function<bool(EquivPair&, EquivPair&)> eqv_comp = [](EquivPair& a, EquivPair& b) {
+        return a.prob > b.prob;
+    };
+
+    std::sort(new_ent_eqv_pairs.begin(), new_ent_eqv_pairs.end(), eqv_comp);
+
+    ent_eqv_mp.clear();
+
+    for (EquivPair &eqv_tuple : new_ent_eqv_pairs) {
+        uint64_t id = eqv_tuple.id;
+        uint64_t cp_id = eqv_tuple.cp_id;
+        if (!visited.count(id) && !visited.count(cp_id)) {
+            double prob = eqv_tuple.prob;
+            insert_ent_equiv(id, cp_id, prob);
+            insert_ent_equiv(cp_id, id, prob);
+            visited.insert(id);
+            visited.insert(cp_id);
+        }
+    }
+}
+
+void PARISEquiv::reset_ongoing_mp() {
+    ongoing_ent_eqv_mp.clear();
+    ongoing_rel_deno.clear();
+    ongoing_rel_norm.clear();
 }
 
 double PARISEquiv::get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b) {

@@ -168,6 +168,14 @@ public:
     double get_ent_equiv(KG*, uint64_t, KG*, uint64_t);
     double get_rel_equiv(uint64_t, uint64_t);
     std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
+    void insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>&);
+    void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
+    void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
+    void update_rel_eqv();
+    void update_ent_eqv();
+    std::mutex rel_norm_lock;
+    std::mutex rel_deno_lock;
+    std::mutex ent_eqv_lock;
 private:
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
@@ -178,7 +186,7 @@ private:
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> rel_eqv_mp;
     std::unordered_map<uint64_t, double> ongoing_rel_norm;
-    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_rel_eqv_mp;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_rel_deno;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_ent_eqv_mp;
 };
 
@@ -219,6 +227,55 @@ std::unordered_map<uint64_t, double>* PARISEquiv::get_ent_cp_map_ptr(KG *source,
         }
         return &EMPTY_EQV_MAP;
     }
+}
+
+void PARISEquiv::insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>& rel_norm_map) {
+    for (auto iter = rel_norm_map.begin(); iter != rel_norm_map.end(); ++iter) {
+        uint64_t relation = iter -> first;
+        double factor = iter -> second;
+        ongoing_rel_norm[relation] += factor;
+    }
+}
+
+void PARISEquiv::insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& rel_deno_map) {
+    for (auto iter = rel_deno_map.begin(); iter != rel_deno_map.end(); ++iter) {
+        uint64_t relation = iter -> first;
+        std::unordered_map<uint64_t, double> relation_cp_map = iter -> second;
+        
+        for (auto sub_iter = relation_cp_map.begin(); sub_iter != relation_cp_map.end(); ++sub_iter) {
+            uint64_t relation_cp = sub_iter -> first;
+            double factor = sub_iter -> second;
+            
+            if (!ongoing_rel_deno.count(relation)) {
+                ongoing_rel_deno[relation] = std::unordered_map<uint64_t, double>();
+            }
+            ongoing_rel_deno[relation][relation_cp] += factor;
+        }
+    }
+}
+
+void PARISEquiv::insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& ent_eqv_result) {
+    for (auto iter = ent_eqv_result.begin(); iter != ent_eqv_result.end(); ++iter) {
+        uint64_t ent_id = iter -> first;
+        std::unordered_map<uint64_t, double> ent_cp_map = iter -> second;
+
+        for (auto sub_iter = ent_cp_map.begin(); sub_iter != ent_cp_map.end(); ++sub_iter) {
+            uint64_t end_cp_id = sub_iter -> first;
+            double prob = sub_iter -> second;
+            if (!ongoing_ent_eqv_mp.count(ent_id)) {
+                ongoing_ent_eqv_mp[ent_id] = std::unordered_map<uint64_t, double>();
+            }
+            ongoing_ent_eqv_mp[ent_id][end_cp_id] = prob;
+        }
+    }
+}
+
+void PARISEquiv::update_rel_eqv() {
+
+}
+
+void PARISEquiv::update_ent_eqv() {
+
 }
 
 double PARISEquiv::get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b) {
@@ -519,14 +576,13 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
             
             while (!st1.empty()) {
                 if (!ent_eqv_result.count(ent_id)) {
-                    ent_eqv_result = std::unordered_map<uint64_t, double>();
+                    ent_eqv_result[ent_id] = std::unordered_map<uint64_t, double>();
                 }
-                ent_eqv_result[ent_id][st1.top().first][st1.top().second];
+                ent_eqv_result[ent_id][st1.top().first] = st1.top().second;
                 st1.pop();
             }
 
             ent_ongoing_eqv.clear();
-
         }; 
         
         if (ent_align) {
@@ -534,6 +590,29 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
         }
     }
     
+    bool has_updated_rel_norm = false, has_updated_rel_deno = false, has_update_ent_eqv = !ent_align;
+
+    while (!(has_updated_rel_norm && has_updated_rel_deno && has_update_ent_eqv)) {
+        if (!has_updated_rel_norm) {
+            if (paris_eqv -> rel_norm_lock.try_lock()) {
+                has_updated_rel_norm = true;
+                paris_eqv -> insert_ongoing_rel_norm(rel_ongoing_norm_eqv);
+                paris_eqv -> rel_norm_lock.unlock();
+            }
+        } else if (!has_updated_rel_deno) {
+            if (paris_eqv -> rel_deno_lock.try_lock()) {
+                has_updated_rel_deno = true;
+                paris_eqv -> insert_ongoing_rel_deno(rel_ongoing_deno_eqv);
+                paris_eqv -> rel_deno_lock.unlock();
+            }
+        } else if (!has_update_ent_eqv) {
+            if (paris_eqv -> ent_eqv_lock.try_lock()) {
+                has_update_ent_eqv = true;
+                paris_eqv -> insert_ent_equiv(ent_eqv_result);
+                paris_eqv -> ent_eqv_lock.unlock();
+            }
+        }
+    }
 
 }
 

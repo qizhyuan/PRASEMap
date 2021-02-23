@@ -6,6 +6,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <stack>
 #include <set>
 #include <queue>
 #include <atomic>
@@ -20,8 +21,8 @@ public:
     bool is_attribute(uint64_t);
     bool is_literal(uint64_t);
     void test();
-    std::set<std::pair<uint64_t, uint64_t>>& get_rel_tail_pair_set(uint64_t);
-    std::set<std::pair<uint64_t, uint64_t>>& get_rel_head_pair_set(uint64_t);
+    std::set<std::pair<uint64_t, uint64_t>>* get_rel_tail_pairs_ptr(uint64_t);
+    std::set<std::pair<uint64_t, uint64_t>>* get_rel_head_pairs_ptr(uint64_t);
     double get_functionality(uint64_t);
     double get_inv_functionality(uint64_t);
 private:
@@ -83,18 +84,18 @@ bool KG::is_literal(uint64_t ent_id) {
     return !ent_set.count(ent_id);
 }
 
-std::set<std::pair<uint64_t, uint64_t>>& KG::get_rel_tail_pair_set(uint64_t head_id) {
+std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_tail_pairs_ptr(uint64_t head_id) {
     if (!h_r_t_mp.count(head_id)) {
-        return this -> EMPTY_PAIR_SET;
+        return &EMPTY_PAIR_SET;
     }
-    return h_r_t_mp[head_id];
+    return &h_r_t_mp[head_id];
 }
 
-std::set<std::pair<uint64_t, uint64_t>>& KG::get_rel_head_pair_set(uint64_t tail_id) {
+std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_head_pairs_ptr(uint64_t tail_id) {
     if (!t_r_h_mp.count(tail_id)) {
-        return this -> EMPTY_PAIR_SET;
+        return &EMPTY_PAIR_SET;
     }
-    return t_r_h_mp[tail_id];
+    return &t_r_h_mp[tail_id];
 }
 
 double KG::get_functionality(uint64_t rel_id) {
@@ -165,7 +166,8 @@ public:
     void insert_ent_equiv(uint64_t, uint64_t, double);
     void insert_rel_equiv(uint64_t, uint64_t, double);
     double get_ent_equiv(KG*, uint64_t, KG*, uint64_t);
-    std::unordered_map<uint64_t, double>& get_ent_counterpart_map(KG*, uint64_t);
+    double get_rel_equiv(uint64_t, uint64_t);
+    std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
 private:
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
@@ -201,17 +203,21 @@ double PARISEquiv::get_ent_equiv(KG* kg_a, uint64_t ent_id_a, KG* kg_b, uint64_t
     return get_literal_equiv(ent_id_a, ent_id_b);
 }
 
-std::unordered_map<uint64_t, double>& PARISEquiv::get_ent_counterpart_map(KG *source, uint64_t ent_id) {
+double PARISEquiv::get_rel_equiv(uint64_t rel_id, uint64_t rel_cp_id) {
+    return get_value_from_mp_mp(rel_eqv_mp, rel_id, rel_cp_id);
+}
+
+std::unordered_map<uint64_t, double>* PARISEquiv::get_ent_cp_map_ptr(KG *source, uint64_t ent_id) {
     if (source ->is_literal(ent_id)) {
         if (lite_eqv_mp.count(ent_id)) {
-            return lite_eqv_mp[ent_id];
+            return &lite_eqv_mp[ent_id];
         }
-        return EMPTY_EQV_MAP;
+        return &EMPTY_EQV_MAP;
     } else {
         if (ent_eqv_mp.count(ent_id)) {
-            return ent_eqv_mp[ent_id];
+            return &ent_eqv_mp[ent_id];
         }
-        return EMPTY_EQV_MAP;
+        return &EMPTY_EQV_MAP;
     }
 }
 
@@ -242,21 +248,31 @@ double PARISEquiv::get_literal_equiv(uint64_t literal_id_a, uint64_t literal_id_
 
 struct PARISParams {
     double ENT_EQV_THRESHOLD;
+    double REL_EQV_THRESHOLD;
+    double REL_EQV_FACTOR_THRESHOLD;
+    double REL_INIT_EQV;
     double INIT_REL_EQV_PROB;
     double HIGH_CONF_THRESHOLD;
     double OUTPUT_THRESHOLD;
     double PENALTY_VALUE;
     double ENT_REGISTER_THRESHOLD;
-    PARISParms();
+    int INIT_ITERATION;
+    int ENT_CANDIDATE_NUM;
+    PARISParams();
 };
 
 PARISParams::PARISParams() {
     ENT_EQV_THRESHOLD = 0.1;
+    REL_EQV_THRESHOLD = 0.1;
+    REL_EQV_FACTOR_THRESHOLD = 0.05;
+    REL_INIT_EQV = 0.1;
     INIT_REL_EQV_PROB = 0.1;
     HIGH_CONF_THRESHOLD = 0.9;
     OUTPUT_THRESHOLD = 0.1;
     PENALTY_VALUE = 1.01;
     ENT_REGISTER_THRESHOLD = 0.01;
+    INIT_ITERATION = 2;
+    ENT_CANDIDATE_NUM = 3;
 }
 
 
@@ -266,14 +282,19 @@ public:
     void insert_ent_eqv(uint64_t, uint64_t, double, bool);
     void insert_lite_eqv(uint64_t, uint64_t, double, bool);
     void insert_rel_eqv(uint64_t, uint64_t, double, bool);
+    void enable_rel_init(bool);
 private:
+    int iteration;
+    bool enable_relation_init;
     PARISEquiv* paris_eqv;
-    PARISParams paris_params;
+    PARISParams* paris_params;
     KG *kg_a, *kg_b;
     std::mutex queue_lock;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
-    void one_iteration_one_way(std::queue<uint64_t> &, KG*, KG*);
+    double get_filtered_prob(uint64_t, uint64_t, double);
+    bool is_rel_init();
+    void one_iteration_one_way(std::queue<uint64_t> &, KG*, KG*, bool);
 };
 
 PRModule::PRModule(KG &kg_a, KG &kg_b) {
@@ -281,6 +302,8 @@ PRModule::PRModule(KG &kg_a, KG &kg_b) {
     this -> kg_b = &kg_b;
     paris_eqv = new PARISEquiv();
     paris_params = new PARISParams();
+    iteration = 0;
+    enable_relation_init = true;
 }
 
 void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b, double prob) {
@@ -311,10 +334,93 @@ void PRModule::insert_rel_eqv(uint64_t id_a, uint64_t id_b, double prob, bool fo
     }
 }
 
-void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, KG* kg_r) {
+void PRModule::enable_rel_init(bool flag) {
+    enable_relation_init = flag;
+}
+
+double PRModule::get_filtered_prob(uint64_t id_a, uint64_t id_b, double prob) {
+    if (forced_eqv_mp.count(id_a)) {
+        if (forced_eqv_mp[id_a].count(id_b)) {
+            prob = forced_eqv_mp[id_a][id_b];
+        }
+    }
+    return prob;
+}
+
+bool PRModule::is_rel_init() {
+    if (enable_relation_init) {
+        if (iteration <= paris_params ->INIT_ITERATION) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, KG* kg_r, bool ent_align = true) {
     uint64_t ent_id;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ent_eqv_result;
     std::unordered_map<uint64_t, double> ent_ongoing_eqv;
+    std::unordered_map<uint64_t, double> rel_ongoing_norm_eqv;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> rel_ongoing_deno_eqv;
+
+    std::function<std::unordered_map<uint64_t, double>*(uint64_t)> get_cp_map_ptr = [&](uint64_t id) {
+        std::unordered_map<uint64_t, double>* map_ptr;
+
+        if (ent_eqv_result.count(id)) {
+            map_ptr = &ent_eqv_result[id];
+        } else {
+            map_ptr = paris_eqv -> get_ent_cp_map_ptr(kg_l, id);
+        }
+
+        return map_ptr;
+    };
+
+    std::function<void(std::unordered_map<uint64_t, double>&, uint64_t, double)> register_ongoing_rel_eqv_deno 
+    = [&](std::unordered_map<uint64_t, double>& mp, uint64_t cp_id, double prob) {
+        if (!mp.count(cp_id)) {
+            mp[cp_id] = 1.0;
+        }
+        mp[cp_id] *= (1.0 - prob);
+    };
+
+    std::function<void(uint64_t, uint64_t, uint64_t, double)> register_ongoing_ent_eqv = [&](uint64_t rel_id, uint64_t rel_cp_id, uint64_t head_cp_id, double tail_cp_eqv) {
+        double rel_eqv_sub = paris_eqv ->get_rel_equiv (rel_id, rel_cp_id);
+        double rel_eqv_sup = paris_eqv ->get_rel_equiv (rel_cp_id, rel_id);
+
+        rel_eqv_sub /= paris_params -> PENALTY_VALUE;
+        rel_eqv_sup /= paris_params -> PENALTY_VALUE;
+
+        if (rel_eqv_sub < paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < paris_params -> REL_EQV_THRESHOLD) {
+            if (is_rel_init()) {
+                rel_eqv_sup = paris_params -> REL_EQV_THRESHOLD;
+                rel_eqv_sub = paris_params -> REL_EQV_THRESHOLD;
+            } else {
+                return;
+            }
+        }
+
+        double inv_functionality_l = kg_l -> get_inv_functionality(rel_id);
+        double inv_functionality_r = kg_r -> get_inv_functionality(rel_cp_id);
+
+        double factor = 1.0;
+
+        if (inv_functionality_r >= 0.0 && rel_eqv_sub >= 0.0) {
+            factor *= (1.0 - rel_eqv_sub * inv_functionality_r * tail_cp_eqv);
+        }
+
+        if (inv_functionality_l >= 0.0 && rel_eqv_sup >= 0.0) {
+            factor *= (1.0 - rel_eqv_sup * inv_functionality_l * tail_cp_eqv);
+        }
+
+        if (1.0 - factor >= paris_params -> REL_EQV_FACTOR_THRESHOLD) {
+            if (!ent_ongoing_eqv.count(head_cp_id)) {
+                ent_ongoing_eqv[head_cp_id] = 1.0;
+            }
+            ent_ongoing_eqv[head_cp_id] *= factor;
+        }
+
+    };
+
     while (!ent_queue.empty()) {
         queue_lock.lock();
         if (!ent_queue.empty()) {
@@ -325,26 +431,106 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
             continue;
         }
         queue_lock.unlock();
-        std::set<std::pair<uint64_t, uint64_t>> rel_head_pairs =  kg_l -> get_rel_tail_pair_set(ent_id);
-        for (auto iter = rel_head_pairs.begin(); iter != rel_head_pairs.end(); ++iter) {
+
+        std::set<std::pair<uint64_t, uint64_t>>* rel_tail_pairs_ptr =  kg_l -> get_rel_tail_pairs_ptr(ent_id);
+        std::unordered_map<uint64_t, double>* head_cp_ptr = get_cp_map_ptr(ent_id);
+
+        for (auto iter = rel_tail_pairs_ptr -> begin(); iter != rel_tail_pairs_ptr -> end(); ++iter) {
             uint64_t relation = iter -> first;
             uint64_t tail = iter -> second;
-            std::unordered_map<uint64_t, double>* map_ptr;
-            if (ent_eqv_result.count(tail)) {
-                map_ptr = &ent_eqv_result[tail];
-            } else {
-                map_ptr = &(paris_eqv -> get_ent_counterpart_map(kg_l, tail));
-            }
-            for (auto sub_iter = map_ptr -> begin(); sub_iter != map_ptr -> end(); ++sub_iter) {
-                uint64_t tail_cp = map_ptr -> first;
-                double tail_eqv_prob = map_ptr -> second;
-                if (forced_eqv_mp.count(tail)) {
-                    if (forced_eqv_mp[tail].count(tail_cp)) {
-                        tail_eqv_prob = forced_eqv_mp[tail][tail_cp];
-                    }
+            std::unordered_map<uint64_t, double>* tail_cp_ptr = get_cp_map_ptr(tail);
+
+            double rel_ongoing_norm_factor = 1.0;
+            std::unordered_map<uint64_t, double> rel_ongoing_deno_factor_map;
+
+            for (auto tail_iter = tail_cp_ptr -> begin(); tail_iter != tail_cp_ptr -> end(); ++tail_iter) {
+                uint64_t tail_cp = tail_iter -> first;
+                double tail_eqv_prob = get_filtered_prob(tail, tail_cp, tail_iter -> second);
+
+                if (tail_eqv_prob < paris_params -> ENT_EQV_THRESHOLD) {
+                    continue;
                 }
 
+                for (auto head_iter = head_cp_ptr -> begin(); head_iter != head_cp_ptr -> end(); ++head_iter) {
+                    uint64_t head_cp = head_iter -> first;
+                    double head_eqv_prob = get_filtered_prob(ent_id, head_cp, head_iter -> second);
+                    rel_ongoing_norm_factor *= (1.0 - head_eqv_prob * tail_eqv_prob);
+                }
+
+                std::set<std::pair<uint64_t, uint64_t>>* rel_head_pairs_ptr = kg_r -> get_rel_head_pairs_ptr(tail_cp);
+                for (auto sub_iter = rel_tail_pairs_ptr -> begin(); sub_iter != rel_tail_pairs_ptr -> end(); ++sub_iter) {
+                    uint64_t head_cp_candidate = sub_iter -> second;
+                    if (kg_r -> is_literal(head_cp_candidate)) {
+                        continue;
+                    }
+
+                    uint64_t relation_cp_candidate = sub_iter -> first;
+
+                    if (head_cp_ptr -> count(head_cp_candidate)) {
+                        double eqv_prob = get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
+                        register_ongoing_rel_eqv_deno(rel_ongoing_deno_factor_map, relation_cp_candidate, tail_eqv_prob * eqv_prob);
+                    }
+                    
+                    if (ent_align) {
+                        register_ongoing_ent_eqv(relation, relation_cp_candidate, head_cp_candidate, tail_eqv_prob);
+                    }
+
+                }
             }
+
+            if (!rel_ongoing_norm_eqv.count(relation)) {
+                rel_ongoing_norm_eqv[relation] = 0.0;
+            }
+            
+            rel_ongoing_norm_eqv[relation] += 1.0 - rel_ongoing_norm_factor;
+
+            for (auto deno_iter = rel_ongoing_deno_factor_map.begin(); deno_iter != rel_ongoing_deno_factor_map.end(); ++deno_iter) {
+                uint64_t relation_cp_candidate = deno_iter -> first;
+                double rel_eqv_deno = 1.0 - (deno_iter -> second);
+
+                if (!rel_ongoing_deno_eqv.count(relation)) {
+                    rel_ongoing_deno_eqv[relation] = std::unordered_map<uint64_t, double>();
+                }
+                rel_ongoing_deno_eqv[relation][relation_cp_candidate] += rel_eqv_deno;
+            }
+
+        }
+
+        std::function<void()> update_ent_eqv = [&]() {
+            std::stack<std::pair<uint64_t, double>> st1, st2;
+            for (auto iter = ent_ongoing_eqv.begin(); iter != ent_ongoing_eqv.end(); ++iter) {
+                uint64_t ent_cp_candidate = iter -> first;
+                double ent_cp_eqv = get_filtered_prob(ent_id, ent_cp_candidate, 1.0 - (iter -> second));
+                
+                while (!st1.empty() && st1.top().second < ent_cp_eqv) {
+                    st2.push(st1.top());
+                    st1.pop();
+                }
+                
+                if (st1.size() < paris_params -> ENT_CANDIDATE_NUM) {
+                    st1.push(std::make_pair(ent_cp_candidate, ent_cp_eqv));
+                }
+                
+                while (st1.size() < paris_params -> ENT_CANDIDATE_NUM && !st2.empty()) {
+                    st1.push(st2.top());
+                    st2.pop();
+                }
+            }
+            
+            while (!st1.empty()) {
+                if (!ent_eqv_result.count(ent_id)) {
+                    ent_eqv_result = std::unordered_map<uint64_t, double>();
+                }
+                ent_eqv_result[ent_id][st1.top().first][st1.top().second];
+                st1.pop();
+            }
+
+            ent_ongoing_eqv.clear();
+
+        }; 
+        
+        if (ent_align) {
+            update_ent_eqv();
         }
     }
     

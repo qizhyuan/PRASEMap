@@ -240,6 +240,26 @@ double PARISEquiv::get_literal_equiv(uint64_t literal_id_a, uint64_t literal_id_
     return get_value_from_mp_mp(this -> lite_eqv_mp, literal_id_a, literal_id_b);
 }
 
+struct PARISParams {
+    double ENT_EQV_THRESHOLD;
+    double INIT_REL_EQV_PROB;
+    double HIGH_CONF_THRESHOLD;
+    double OUTPUT_THRESHOLD;
+    double PENALTY_VALUE;
+    double ENT_REGISTER_THRESHOLD;
+    PARISParms();
+};
+
+PARISParams::PARISParams() {
+    ENT_EQV_THRESHOLD = 0.1;
+    INIT_REL_EQV_PROB = 0.1;
+    HIGH_CONF_THRESHOLD = 0.9;
+    OUTPUT_THRESHOLD = 0.1;
+    PENALTY_VALUE = 1.01;
+    ENT_REGISTER_THRESHOLD = 0.01;
+}
+
+
 class PRModule {
 public:
     PRModule(KG &, KG &);
@@ -248,6 +268,7 @@ public:
     void insert_rel_eqv(uint64_t, uint64_t, double, bool);
 private:
     PARISEquiv* paris_eqv;
+    PARISParams paris_params;
     KG *kg_a, *kg_b;
     std::mutex queue_lock;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
@@ -259,6 +280,7 @@ PRModule::PRModule(KG &kg_a, KG &kg_b) {
     this -> kg_a = &kg_a;
     this -> kg_b = &kg_b;
     paris_eqv = new PARISEquiv();
+    paris_params = new PARISParams();
 }
 
 void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b, double prob) {
@@ -303,12 +325,26 @@ void PRModule::one_iteration_one_way(std::queue<uint64_t>& ent_queue, KG* kg_l, 
             continue;
         }
         queue_lock.unlock();
-        std::set<std::pair<uint64_t, uint64_t>> rel_head_pairs =  kg_l -> get_rel_head_pair_set(ent_id);
+        std::set<std::pair<uint64_t, uint64_t>> rel_head_pairs =  kg_l -> get_rel_tail_pair_set(ent_id);
         for (auto iter = rel_head_pairs.begin(); iter != rel_head_pairs.end(); ++iter) {
             uint64_t relation = iter -> first;
-            uint64_t head = iter -> second;
-            std::unordered_map<uint64_t, double> counterpart_map = paris_eqv -> get_ent_counterpart_map(kg_l, head);
+            uint64_t tail = iter -> second;
+            std::unordered_map<uint64_t, double>* map_ptr;
+            if (ent_eqv_result.count(tail)) {
+                map_ptr = &ent_eqv_result[tail];
+            } else {
+                map_ptr = &(paris_eqv -> get_ent_counterpart_map(kg_l, tail));
+            }
+            for (auto sub_iter = map_ptr -> begin(); sub_iter != map_ptr -> end(); ++sub_iter) {
+                uint64_t tail_cp = map_ptr -> first;
+                double tail_eqv_prob = map_ptr -> second;
+                if (forced_eqv_mp.count(tail)) {
+                    if (forced_eqv_mp[tail].count(tail_cp)) {
+                        tail_eqv_prob = forced_eqv_mp[tail][tail_cp];
+                    }
+                }
 
+            }
         }
     }
     

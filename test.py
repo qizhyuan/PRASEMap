@@ -32,13 +32,13 @@ def construct_kg(path_r, path_a=None, sep='\t'):
     return kg
 
 
-path_r_1 = r"D:\repos\PARIS-PYTHON\dataset\D_W_100K_V2\rel_triples_1"
-path_r_2 = r"D:\repos\PARIS-PYTHON\dataset\D_W_100K_V2\rel_triples_2"
+path_r_1 = r"D:\repos\PARIS-PYTHON\dataset\industry\rel_triples_1"
+path_r_2 = r"D:\repos\PARIS-PYTHON\dataset\industry\rel_triples_2"
 
-path_a_1 = r"D:\repos\PARIS-PYTHON\dataset\D_W_100K_V2\attr_triples_1"
-path_a_2 = r"D:\repos\PARIS-PYTHON\dataset\D_W_100K_V2\attr_triples_2"
+path_a_1 = r"D:\repos\PARIS-PYTHON\dataset\industry\attr_triples_1"
+path_a_2 = r"D:\repos\PARIS-PYTHON\dataset\industry\attr_triples_2"
 
-test_path = r"D:\repos\PARIS-PYTHON\dataset\D_W_100K_V2\ent_links"
+test_path = r"D:\repos\PARIS-PYTHON\dataset\industry\ent_links"
 
 start = time.time()
 

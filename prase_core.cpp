@@ -425,7 +425,8 @@ PARISParams::PARISParams() {
     INIT_ITERATION = 2;
     ENT_CANDIDATE_NUM = 3;
     SMOOTH_NORM = 10;
-    THREAD_NUM = std::thread::hardware_concurrency();
+    // THREAD_NUM = std::thread::hardware_concurrency();
+    THREAD_NUM = 6;
     MAX_THREAD_NUM = INT_MAX;
     MIN_THREAD_NUM = 1;
     MAX_ITERATION_NUM = 10;

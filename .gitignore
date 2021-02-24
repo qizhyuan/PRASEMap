@@ -35,3 +35,7 @@
 
 /build
 /.vscode
+/dist
+/UNKNOWN.egg-info
+/.idea
+/__pycache__

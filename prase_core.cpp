@@ -10,7 +10,6 @@
 #include <set>
 #include <tuple>
 #include <queue>
-// #include <atomic>
 #include <random>
 #include <algorithm>
 #include <functional>
@@ -220,7 +219,7 @@ void PARISEquiv::insert_rel_equiv(uint64_t rel_id_a, uint64_t rel_id_b, double p
 }
 
 double PARISEquiv::get_ent_equiv(KG* kg_a, uint64_t ent_id_a, KG* kg_b, uint64_t ent_id_b) {
-    if (kg_a -> is_literal(ent_id_a)) {
+    if (!kg_a -> is_literal(ent_id_a)) {
         return get_entity_equiv(ent_id_a, ent_id_b);
     }
     return get_literal_equiv(ent_id_a, ent_id_b);
@@ -425,8 +424,8 @@ PARISParams::PARISParams() {
     INIT_ITERATION = 2;
     ENT_CANDIDATE_NUM = 1;
     SMOOTH_NORM = 10;
-    THREAD_NUM = std::thread::hardware_concurrency();
-    // THREAD_NUM = 6;
+    // THREAD_NUM = std::thread::hardware_concurrency();
+    THREAD_NUM = 32;
     MAX_THREAD_NUM = INT_MAX;
     MIN_THREAD_NUM = 1;
     MAX_ITERATION_NUM = 10;
@@ -560,7 +559,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
     };
 
     std::function<void(uint64_t, uint64_t, uint64_t, double)> register_ongoing_ent_eqv = [&](uint64_t rel_id, uint64_t rel_cp_id, uint64_t head_cp_id, double tail_cp_eqv) {
-        // std::cout<<"register"<<std::endl;
         double rel_eqv_sub = _this -> paris_eqv -> get_rel_equiv (rel_id, rel_cp_id);
         double rel_eqv_sup = _this -> paris_eqv -> get_rel_equiv (rel_cp_id, rel_id);
 
@@ -576,12 +574,9 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
             }
         }
 
-        // std::cout<<"rel_eqv_sub: "<<rel_eqv_sub<<std::endl;
 
         double inv_functionality_l = kg_l -> get_inv_functionality(rel_id);
         double inv_functionality_r = kg_r -> get_inv_functionality(rel_cp_id);
-
-        // std::cout<<"inv_functionality_l: "<<inv_functionality_l<<std::endl;
 
         double factor = 1.0;
 
@@ -592,10 +587,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
         if (inv_functionality_l >= 0.0 && rel_eqv_sup >= 0.0) {
             factor *= (1.0 - rel_eqv_sup * inv_functionality_l * tail_cp_eqv);
         }
-
-        // if (factor < 1.0) {
-        //     std::cout<<"factor: "<<factor<<std::endl;
-        // }
 
 
         if (1.0 - factor >= _this -> paris_params -> REL_EQV_FACTOR_THRESHOLD) {
@@ -621,16 +612,11 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
         std::set<std::pair<uint64_t, uint64_t>>* rel_tail_pairs_ptr =  kg_l -> get_rel_tail_pairs_ptr(ent_id);
         std::unordered_map<uint64_t, double>* head_cp_ptr = get_cp_map_ptr(ent_id);
 
-        // std::cout<<"rel_tail_pairs_num: "<<rel_tail_pairs_ptr ->size()<<std::endl;
 
         for (auto iter = rel_tail_pairs_ptr -> begin(); iter != rel_tail_pairs_ptr -> end(); ++iter) {
             uint64_t relation = iter -> first;
             uint64_t tail = iter -> second;
             std::unordered_map<uint64_t, double>* tail_cp_ptr = get_cp_map_ptr(tail);
-
-            // if (tail_cp_ptr -> size() > 0) {
-            //     std::cout<<"tail_cp_num: "<<tail_cp_ptr ->size()<<std::endl;
-            // }
 
             double rel_ongoing_norm_factor = 1.0;
             std::unordered_map<uint64_t, double> rel_ongoing_deno_factor_map;
@@ -638,10 +624,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
             for (auto tail_iter = tail_cp_ptr -> begin(); tail_iter != tail_cp_ptr -> end(); ++tail_iter) {
                 uint64_t tail_cp = tail_iter -> first;
                 double tail_eqv_prob = _this -> get_filtered_prob(tail, tail_cp, tail_iter -> second);
-
-                // if (tail_cp_ptr -> size() > 0) {
-                //     std::cout<<"prob: "<<tail_eqv_prob<<std::endl;
-                // }
 
                 if (tail_eqv_prob < _this -> paris_params -> ENT_EQV_THRESHOLD) {
                     continue;
@@ -655,24 +637,14 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
                 std::set<std::pair<uint64_t, uint64_t>>* rel_head_pairs_ptr = kg_r -> get_rel_head_pairs_ptr(tail_cp);
 
-                // if (rel_head_pairs_ptr -> size() > 3) {
-                //     std::cout<<"here: "<<rel_head_pairs_ptr -> size()<<std::endl;
-                // }
-
                 for (auto sub_iter = rel_head_pairs_ptr -> begin(); sub_iter != rel_head_pairs_ptr -> end(); ++sub_iter) {
                     uint64_t head_cp_candidate = sub_iter -> second;
-                    // std::cout<<"hello: "<<head_cp_candidate<<std::endl;
 
                     if (kg_r -> is_literal(head_cp_candidate)) {
                         continue;
                     }
 
-                    // std::cout<<"hello: "<<std::endl;
-
-
                     uint64_t relation_cp_candidate = sub_iter -> first;
-
-                    // std::cout<<"here: "<<relation_cp_candidate<<std::endl;
 
                     if (head_cp_ptr -> count(head_cp_candidate)) {
                         double eqv_prob = _this -> get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
@@ -738,7 +710,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
         }; 
         
         if (ent_align) {
-            // std::cout<<"ongoing: "<<ent_ongoing_eqv.size()<<std::endl;
             update_ent_eqv();
         }
     }

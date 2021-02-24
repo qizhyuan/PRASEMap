@@ -415,7 +415,7 @@ struct PARISParams {
 PARISParams::PARISParams() {
     ENT_EQV_THRESHOLD = 0.1;
     REL_EQV_THRESHOLD = 0.1;
-    REL_EQV_FACTOR_THRESHOLD = 0.05;
+    REL_EQV_FACTOR_THRESHOLD = 0.01;
     REL_INIT_EQV = 0.1;
     INIT_REL_EQV_PROB = 0.1;
     HIGH_CONF_THRESHOLD = 0.9;
@@ -423,10 +423,10 @@ PARISParams::PARISParams() {
     PENALTY_VALUE = 1.01;
     ENT_REGISTER_THRESHOLD = 0.01;
     INIT_ITERATION = 2;
-    ENT_CANDIDATE_NUM = 3;
+    ENT_CANDIDATE_NUM = 1;
     SMOOTH_NORM = 10;
-    // THREAD_NUM = std::thread::hardware_concurrency();
-    THREAD_NUM = 6;
+    THREAD_NUM = std::thread::hardware_concurrency();
+    // THREAD_NUM = 6;
     MAX_THREAD_NUM = INT_MAX;
     MIN_THREAD_NUM = 1;
     MAX_ITERATION_NUM = 10;

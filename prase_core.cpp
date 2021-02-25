@@ -1,6 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-// #include <pybind11/eigen.h>
+#include <pybind11/eigen.h>
 #include <iostream>
 #include <thread>
 #include <mutex>
@@ -11,40 +11,82 @@
 #include <tuple>
 #include <queue>
 #include <random>
+#include <atomic>
 #include <algorithm>
 #include <functional>
 
 namespace py = pybind11;
 
+class SpinLock {
+public:
+    SpinLock() : flag_(false) {}
+    void lock();
+    void unlock();
+
+private:
+    std::atomic<bool> flag_;
+};
+
+void SpinLock::lock() {
+    bool expect = false;
+    while (!flag_.compare_exchange_weak(expect, true)) {
+        expect = false;
+    }
+}
+
+void SpinLock::unlock() {
+    flag_.store(false);
+}
+
+struct pair_hash {
+    template<class T1, class T2>
+    std::size_t operator() (const std::pair<T1, T2>& p) const {
+        auto h1 = std::hash<T1>{}(p.first);
+        auto h2 = std::hash<T2>{}(p.second);
+        return h1 ^ h2;
+    }
+};
+
 class KG {
 public:
+    static bool is_emb_empty(Eigen::VectorXd&);
     void insert_rel_triple(uint64_t, uint64_t, uint64_t);
     void insert_rel_inv_triple(uint64_t, uint64_t, uint64_t);
     void insert_attr_triple(uint64_t, uint64_t, uint64_t);
     void insert_attr_inv_triple(uint64_t, uint64_t, uint64_t);
     bool is_attribute(uint64_t);
     bool is_literal(uint64_t);
+    bool is_embs_filled();
     void test();
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_tail_pairs_ptr(uint64_t);
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_head_pairs_ptr(uint64_t);
     std::set<uint64_t>& get_ent_set();
+    std::set<uint64_t>& get_lite_set();
+    std::set<uint64_t>& get_rel_set();
+    std::set<uint64_t>& get_attr_set();
     double get_functionality(uint64_t);
     double get_inv_functionality(uint64_t);
     void init_functionalities();
+    void set_ent_embed(uint64_t, Eigen::VectorXd &);
+    void clear_ent_embeds();
+    Eigen::VectorXd& get_ent_embs(uint64_t);
 private:
     std::set<uint64_t> ent_set;
     std::set<uint64_t> lite_set;
     std::set<uint64_t> attr_set;
     std::set<uint64_t> rel_set;
+    std::unordered_map<uint64_t, Eigen::VectorXd> ent_emb_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> h_r_t_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_mp;
     std::unordered_map<uint64_t, double> functionality_mp;
     std::unordered_map<uint64_t, double> inv_functionality_mp;
     static std::set<std::pair<uint64_t, uint64_t>> EMPTY_PAIR_SET;
     static void insert_triple(std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>>&, uint64_t, uint64_t, uint64_t);
+    static Eigen::VectorXd EMPTY_EMB;
 };
 
 std::set<std::pair<uint64_t, uint64_t>> KG::EMPTY_PAIR_SET = std::set<std::pair<uint64_t, uint64_t>>();
+Eigen::VectorXd KG::EMPTY_EMB(1, 1);
 
 void KG::insert_triple(std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>>& target, uint64_t head, uint64_t relation, uint64_t tail) {
     if (!target.count(head)) {
@@ -105,6 +147,18 @@ std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_head_pairs_ptr(uint64_t tai
 
 std::set<uint64_t>& KG::get_ent_set() {
     return ent_set;
+}
+
+std::set<uint64_t>& KG::get_lite_set() {
+    return lite_set;
+}
+
+std::set<uint64_t>& KG::get_rel_set() {
+    return rel_set;
+}
+
+std::set<uint64_t>& KG::get_attr_set() {
+    return attr_set;
 }
 
 double KG::get_functionality(uint64_t rel_id) {
@@ -170,8 +224,105 @@ void KG::init_functionalities() {
 
 }
 
+bool KG::is_embs_filled() {
+    return !ent_emb_mp.empty();
+}
+
+bool KG::is_emb_empty(Eigen::VectorXd& emb) {
+    return emb == KG::EMPTY_EMB;
+}
+
+void KG::clear_ent_embeds() {
+    ent_emb_mp.clear();
+}
+
+void KG::set_ent_embed(uint64_t ent_id, Eigen::VectorXd &embeds) {
+    ent_emb_mp[ent_id] = embeds;
+}
+
+Eigen::VectorXd& KG::get_ent_embs(uint64_t ent_id) {
+    if (ent_emb_mp.count(ent_id)) {
+        return ent_emb_mp[ent_id];
+    }
+    return EMPTY_EMB;
+}
+
+
+class EmbedEquiv {
+public:
+    EmbedEquiv(KG*, KG*, uint64_t);
+    double get_emb_eqv(uint64_t, uint64_t);
+    bool has_emb_eqv();
+    void init(uint64_t);
+private:
+    KG *kg_a, *kg_b;
+    uint64_t capacity;
+    std::mutex cache_lock;
+    std::unordered_map<std::pair<uint64_t, uint64_t>, double, pair_hash> cache;
+    double calculate_emb_eqv(uint64_t, uint64_t);
+};
+
+EmbedEquiv::EmbedEquiv(KG* kg_a, KG* kg_b, uint64_t capacity) {
+    this -> kg_a = kg_a;
+    this -> kg_b = kg_b;
+    this -> capacity = capacity;
+    cache.reserve(capacity);
+}
+
+void EmbedEquiv::init(uint64_t capacity) {
+    this -> capacity = capacity;
+    cache.clear();
+    cache.reserve(capacity);
+}
+
+bool EmbedEquiv::has_emb_eqv() {
+    if (kg_a -> is_embs_filled() && kg_b -> is_embs_filled()) {
+        return true;
+    }
+    return false;
+}
+
+double EmbedEquiv::calculate_emb_eqv(uint64_t id, uint64_t cp_id) {
+    Eigen::VectorXd& emb_a = kg_a -> get_ent_embs(id);
+    Eigen::VectorXd& emb_b = kg_b -> get_ent_embs(cp_id);
+
+    if (KG::is_emb_empty(emb_a) || KG::is_emb_empty(emb_b)) {
+        return 0.0;
+    }
+
+    double eqv = emb_a.dot(emb_b) / (emb_a.norm() * emb_b.norm());
+    return eqv;
+}
+
+double EmbedEquiv::get_emb_eqv(uint64_t id, uint64_t cp_id) {
+    double eqv = 0.0;
+    if (cache_lock.try_lock()) {
+        std::pair<uint64_t, uint64_t> cp_pair = std::make_pair(id, cp_id);
+        if (cache.count(cp_pair)) {
+            eqv = cache[cp_pair];
+        } else {
+            eqv = calculate_emb_eqv(id, cp_id);
+        }
+        if (cache.size() < capacity) {
+            cache[cp_pair] = eqv;
+        }
+        cache_lock.unlock();
+    } else {
+        eqv = calculate_emb_eqv(id, cp_id);
+        if (cache.size() < capacity) {
+            if (cache_lock.try_lock()) {
+                cache[std::make_pair(id, cp_id)] = eqv;
+                cache_lock.unlock();
+            }
+        } 
+    }
+    return eqv;
+}
+
+
 class PARISEquiv {
 public:
+    PARISEquiv(KG*, KG*);
     void insert_lite_equiv(uint64_t, uint64_t, double);
     void insert_ent_equiv(uint64_t, uint64_t, double);
     void insert_rel_equiv(uint64_t, uint64_t, double);
@@ -182,14 +333,17 @@ public:
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void update_rel_eqv(int);
-    void update_ent_eqv();
+    void update_ent_eqv(bool);
     void reset_ongoing_mp();
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
     std::mutex ent_eqv_lock;
-    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
+    std::vector<uint64_t>& get_kg_a_unaligned_ents();
+    std::vector<uint64_t>& get_kg_b_unaligned_ents();
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_lite_eqv_mp();
 private:
+    KG *kg_a, *kg_b;
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
     static double get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t);
@@ -197,14 +351,51 @@ private:
     static std::unordered_map<uint64_t, double> EMPTY_EQV_MAP;
     std::vector<std::tuple<uint64_t, uint64_t, double>> ent_eqv_tuples;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ent_eqv_mp;
-    
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> rel_eqv_mp;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
     std::unordered_map<uint64_t, double> ongoing_rel_norm;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_rel_deno;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_ent_eqv_mp;
+    std::vector<uint64_t> kg_a_unaligned_ents;
+    std::vector<uint64_t> kg_b_unaligned_ents;
 };
 
+PARISEquiv::PARISEquiv(KG* kg_a, KG* kg_b) {
+    this -> kg_a = kg_a;
+    this -> kg_b = kg_b;
+
+    uint64_t min_lite_num = std::min(kg_a -> get_lite_set().size(), kg_b -> get_lite_set().size());
+    uint64_t reserve_space = (uint64_t) (0.2 * (double) min_lite_num);
+    lite_eqv_mp.reserve(reserve_space);
+
+    uint64_t kg_a_ent_num = kg_a -> get_ent_set().size();
+    uint64_t kg_b_ent_num = kg_b -> get_ent_set().size();
+    ent_eqv_mp.reserve(kg_a_ent_num + kg_b_ent_num);
+    ongoing_ent_eqv_mp.reserve(kg_a_ent_num);
+
+    uint64_t min_ent_num = std::min(kg_a_ent_num, kg_b_ent_num);
+    ent_eqv_tuples.reserve(min_ent_num + 1);
+
+    uint64_t kg_a_rel_num = kg_a -> get_rel_set().size();
+    uint64_t kg_b_rel_num = kg_b -> get_rel_set().size();
+    uint64_t kg_a_attr_num = kg_a -> get_attr_set().size();
+    uint64_t kg_b_attr_num = kg_b -> get_attr_set().size();
+    uint64_t total_rel_nums = kg_a_rel_num + kg_a_attr_num + kg_b_rel_num + kg_b_attr_num;
+    rel_eqv_mp.reserve(total_rel_nums);
+
+    ongoing_rel_norm.reserve(total_rel_nums);
+    ongoing_rel_deno.reserve(total_rel_nums);
+}
+
 std::unordered_map<uint64_t, double> PARISEquiv::EMPTY_EQV_MAP = std::unordered_map<uint64_t, double>();
+
+std::vector<uint64_t>& PARISEquiv::get_kg_a_unaligned_ents() {
+    return kg_a_unaligned_ents;
+}
+
+std::vector<uint64_t>& PARISEquiv::get_kg_b_unaligned_ents() {
+    return kg_b_unaligned_ents;
+}
 
 void PARISEquiv::insert_lite_equiv(uint64_t lite_id_a, uint64_t lite_id_b, double prob) {
     insert_value_to_mp_mp(this -> lite_eqv_mp, lite_id_a, lite_id_b, prob);
@@ -229,8 +420,12 @@ double PARISEquiv::get_rel_equiv(uint64_t rel_id, uint64_t rel_cp_id) {
     return get_value_from_mp_mp(rel_eqv_mp, rel_id, rel_cp_id);
 }
 
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& PARISEquiv::get_lite_eqv_mp() {
+    return lite_eqv_mp;
+}
+
 std::unordered_map<uint64_t, double>* PARISEquiv::get_ent_cp_map_ptr(KG *source, uint64_t ent_id) {
-    if (source ->is_literal(ent_id)) {
+    if (source -> is_literal(ent_id)) {
         if (lite_eqv_mp.count(ent_id)) {
             return &lite_eqv_mp[ent_id];
         }
@@ -317,7 +512,7 @@ void PARISEquiv::update_rel_eqv(int norm_const) {
     }
 }
 
-void PARISEquiv::update_ent_eqv() {
+void PARISEquiv::update_ent_eqv(bool update_unaligned_ents) {
     std::vector<std::tuple<uint64_t, uint64_t, double>> new_ent_eqv_tuples;
     std::unordered_set<uint64_t> visited;
 
@@ -354,6 +549,24 @@ void PARISEquiv::update_ent_eqv() {
             visited.insert(cp_id);
         }
     }
+
+    if (update_unaligned_ents) {
+        kg_a_unaligned_ents.clear();
+        kg_b_unaligned_ents.clear();
+
+        for (auto ent_id : kg_a -> get_ent_set()) {
+            if (!visited.count(ent_id)) {
+                kg_a_unaligned_ents.push_back(ent_id);
+            }
+        }
+
+        for (auto ent_id : kg_b -> get_ent_set()) {
+            if (!visited.count(ent_id)) {
+                kg_b_unaligned_ents.push_back(ent_id);
+            }
+        }
+    }
+
 }
 
 void PARISEquiv::reset_ongoing_mp() {
@@ -392,6 +605,7 @@ double PARISEquiv::get_literal_equiv(uint64_t literal_id_a, uint64_t literal_id_
 }
 
 struct PARISParams {
+    bool ENABLE_EMB_EQV;
     double ENT_EQV_THRESHOLD;
     double REL_EQV_THRESHOLD;
     double REL_EQV_FACTOR_THRESHOLD;
@@ -401,6 +615,8 @@ struct PARISParams {
     double OUTPUT_THRESHOLD;
     double PENALTY_VALUE;
     double ENT_REGISTER_THRESHOLD;
+    double EMB_EQV_TRADE_OFF;
+    double INV_FUNCTIONALITY_THRESHOLD;
     int INIT_ITERATION;
     int ENT_CANDIDATE_NUM;
     int SMOOTH_NORM;
@@ -408,10 +624,12 @@ struct PARISParams {
     int MAX_THREAD_NUM;
     int MIN_THREAD_NUM;
     int MAX_ITERATION_NUM;
+    uint64_t MAX_EMB_EQV_CACHE_NUM;
     PARISParams();
 };
 
 PARISParams::PARISParams() {
+    ENABLE_EMB_EQV = true;
     ENT_EQV_THRESHOLD = 0.1;
     REL_EQV_THRESHOLD = 0.1;
     REL_EQV_FACTOR_THRESHOLD = 0.01;
@@ -424,11 +642,13 @@ PARISParams::PARISParams() {
     INIT_ITERATION = 2;
     ENT_CANDIDATE_NUM = 1;
     SMOOTH_NORM = 10;
-    // THREAD_NUM = std::thread::hardware_concurrency();
-    THREAD_NUM = 32;
+    THREAD_NUM = std::thread::hardware_concurrency();
     MAX_THREAD_NUM = INT_MAX;
     MIN_THREAD_NUM = 1;
     MAX_ITERATION_NUM = 10;
+    MAX_EMB_EQV_CACHE_NUM = 1000000;
+    EMB_EQV_TRADE_OFF = 0.2;
+    INV_FUNCTIONALITY_THRESHOLD = 0.05;
 }
 
 
@@ -439,16 +659,26 @@ public:
     void insert_lite_eqv(uint64_t, uint64_t, double, bool);
     void insert_rel_eqv(uint64_t, uint64_t, double, bool);
     void enable_rel_init(bool);
+    void enable_emb_eqv(bool);
+    void set_worker_num(int);
+    void set_emb_cache_capacity(uint64_t);
+    void set_ent_candidate_num(int);
+    void set_rel_func_bar(double);
+    void set_se_trade_off(double);
     void init();
+    void reset_emb_eqv();
     void run();
     std::vector<std::tuple<uint64_t, uint64_t, double>> & get_ent_eqv_result();
+    std::vector<uint64_t>& get_kg_a_unaligned_ents();
+    std::vector<uint64_t>& get_kg_b_unaligned_ents();
 private:
     int iteration;
     bool enable_relation_init;
     PARISEquiv* paris_eqv;
     PARISParams* paris_params;
+    EmbedEquiv* emb_eqv;
     KG *kg_a, *kg_b;
-    std::mutex queue_lock;
+    SpinLock queue_lock;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
     double get_filtered_prob(uint64_t, uint64_t, double);
@@ -462,15 +692,54 @@ private:
 PRModule::PRModule(KG &kg_a, KG &kg_b) {
     this -> kg_a = &kg_a;
     this -> kg_b = &kg_b;
-    paris_eqv = new PARISEquiv();
+    paris_eqv = new PARISEquiv(this -> kg_a, this -> kg_b);
     paris_params = new PARISParams();
+    emb_eqv = new EmbedEquiv(this -> kg_a, this -> kg_b, paris_params -> ENT_CANDIDATE_NUM);
     iteration = 0;
     enable_relation_init = true;
+}
+
+void PRModule::set_worker_num(int workers) {
+    paris_params -> THREAD_NUM = workers;
+}
+
+void PRModule::set_emb_cache_capacity(uint64_t capacity) {
+    paris_params -> MAX_EMB_EQV_CACHE_NUM = capacity;
+}
+
+void PRModule::enable_emb_eqv(bool flag) {
+    paris_params -> ENABLE_EMB_EQV = flag;
+}
+
+void PRModule::set_ent_candidate_num(int num) {
+    paris_params -> ENT_CANDIDATE_NUM = num;
+}
+
+void PRModule::set_se_trade_off(double trade_off) {
+    paris_params -> EMB_EQV_TRADE_OFF = trade_off;
+}
+
+void PRModule::set_rel_func_bar(double threshold) {
+    paris_params -> INV_FUNCTIONALITY_THRESHOLD = threshold;
+}
+
+std::vector<uint64_t>& PRModule::get_kg_a_unaligned_ents() {
+    return paris_eqv -> get_kg_a_unaligned_ents();
+}
+
+
+std::vector<uint64_t>& PRModule::get_kg_b_unaligned_ents() {
+    return paris_eqv -> get_kg_b_unaligned_ents();
 }
 
 void PRModule::init() {
     kg_a -> init_functionalities();
     kg_b -> init_functionalities();
+
+}
+
+void PRModule::reset_emb_eqv() {
+    emb_eqv -> init(paris_params -> MAX_EMB_EQV_CACHE_NUM);
 }
 
 void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b, double prob) {
@@ -615,6 +884,11 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
         for (auto iter = rel_tail_pairs_ptr -> begin(); iter != rel_tail_pairs_ptr -> end(); ++iter) {
             uint64_t relation = iter -> first;
+
+            if (kg_l -> get_inv_functionality(relation) < _this -> paris_params -> INV_FUNCTIONALITY_THRESHOLD) {
+                continue;
+            }
+
             uint64_t tail = iter -> second;
             std::unordered_map<uint64_t, double>* tail_cp_ptr = get_cp_map_ptr(tail);
 
@@ -678,23 +952,40 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
 
         std::function<void()> update_ent_eqv = [&]() {
-            std::stack<std::pair<uint64_t, double>> st1, st2;
+            std::vector<std::pair<uint64_t, double>> st1, st2;
+
             for (auto iter = ent_ongoing_eqv.begin(); iter != ent_ongoing_eqv.end(); ++iter) {
                 uint64_t ent_cp_candidate = iter -> first;
-                double ent_cp_eqv = _this -> get_filtered_prob(ent_id, ent_cp_candidate, 1.0 - (iter -> second));
+                double ent_cp_eqv = 1.0 - (iter -> second);
                 
-                while (!st1.empty() && st1.top().second < ent_cp_eqv) {
-                    st2.push(st1.top());
-                    st1.pop();
+                if (_this -> paris_params -> ENABLE_EMB_EQV && _this -> emb_eqv -> has_emb_eqv()) {
+                    double trade_off = _this -> paris_params -> EMB_EQV_TRADE_OFF;
+                    double emb_eqv = _this -> emb_eqv -> get_emb_eqv(ent_id, ent_cp_candidate);
+                    ent_cp_eqv = (1.0 - trade_off) * ent_cp_eqv + trade_off * emb_eqv;    
+                }
+
+                if (ent_cp_eqv < 0.0) {
+                    ent_cp_eqv = 0.0;
+                }
+
+                if (ent_cp_eqv > 1.0) {
+                    ent_cp_eqv = 1.0;
+                }
+
+                ent_cp_eqv = _this -> get_filtered_prob(ent_id, ent_cp_candidate, ent_cp_eqv);
+                
+                while (!st1.empty() && st1.back().second < ent_cp_eqv) {
+                    st2.emplace_back(st1.back());
+                    st1.pop_back();
                 }
                 
                 if (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM) {
-                    st1.push(std::make_pair(ent_cp_candidate, ent_cp_eqv));
+                    st1.emplace_back(std::make_pair(ent_cp_candidate, ent_cp_eqv));
                 }
                 
                 while (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM && !st2.empty()) {
-                    st1.push(st2.top());
-                    st2.pop();
+                    st1.emplace_back(st2.back());
+                    st2.pop_back();
                 }
             }
             
@@ -702,8 +993,8 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                 if (!ent_eqv_result.count(ent_id)) {
                     ent_eqv_result[ent_id] = std::unordered_map<uint64_t, double>();
                 }
-                ent_eqv_result[ent_id][st1.top().first] = st1.top().second;
-                st1.pop();
+                ent_eqv_result[ent_id][st1.back().first] = st1.back().second;
+                st1.pop_back();
             }
 
             ent_ongoing_eqv.clear();
@@ -783,10 +1074,11 @@ void PRModule::one_iteration() {
 
 
     std::cout<<"update_ent_eqv"<<std::endl;
-    paris_eqv -> update_ent_eqv();
+    bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
+    paris_eqv -> update_ent_eqv(update_unaligned_ents);
 
     std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
-    std::cout<<"lite align num: "<<paris_eqv -> lite_eqv_mp.size()<<std::endl;
+    std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
 
     set_ent_queue(kg_b);
     std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
@@ -806,16 +1098,18 @@ void PRModule::iterations() {
     }
 }
 
+
 PYBIND11_MODULE(prase_core, m)
 {
     m.doc() = "Probabilistic Reasoning and Semantic Embedding";
 
-    // m.def("add", &add, "A function which adds two numbers");
 
     py::class_<KG>(m, "KG").def(py::init()).def("insert_rel_triple", &KG::insert_rel_triple)
     .def("insert_rel_inv_triple", &KG::insert_rel_inv_triple)
     .def("insert_attr_triple", &KG::insert_attr_triple)
     .def("insert_attr_inv_triple", &KG::insert_attr_inv_triple)
+    .def("set_ent_embed", &KG::set_ent_embed)
+    .def("clear_ent_embeds", &KG::clear_ent_embeds)
     .def("test", &KG::test)
     ;
 
@@ -823,6 +1117,16 @@ PYBIND11_MODULE(prase_core, m)
     .def("init", &PRModule::init)
     .def("insert_ent_eqv", &PRModule::insert_ent_eqv)
     .def("insert_lite_eqv", &PRModule::insert_lite_eqv)
+    .def("set_worker_num", &PRModule::set_worker_num)
+    .def("set_emb_cache_capacity", &PRModule::set_emb_cache_capacity)
+    .def("set_se_trade_off", &PRModule::set_se_trade_off)
+    .def("set_ent_candidate_num", &PRModule::set_ent_candidate_num)
+    .def("set_rel_func_bar", &PRModule::set_rel_func_bar)
+    .def("reset_emb_eqv", &PRModule::reset_emb_eqv)
+    .def("enable_rel_init", &PRModule::enable_rel_init)
+    .def("enable_emb_eqv", &PRModule::enable_emb_eqv)
+    .def("get_kg_a_unaligned_ents", &PRModule::get_kg_a_unaligned_ents)
+    .def("get_kg_b_unaligned_ents", &PRModule::get_kg_b_unaligned_ents)
     .def("run", &PRModule::run)
     .def("get_ent_eqv_result", &PRModule::get_ent_eqv_result)
     ;

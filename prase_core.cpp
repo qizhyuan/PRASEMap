@@ -604,7 +604,6 @@ PARISParams::PARISParams() {
     ENT_CANDIDATE_NUM = 1;
     SMOOTH_NORM = 10;
     THREAD_NUM = std::thread::hardware_concurrency();
-    // THREAD_NUM = 32;
     MAX_THREAD_NUM = INT_MAX;
     MIN_THREAD_NUM = 1;
     MAX_ITERATION_NUM = 10;
@@ -623,6 +622,8 @@ public:
     void enable_emb_eqv(bool);
     void set_worker_num(int);
     void set_emb_cache_capacity(uint64_t);
+    void set_ent_candidate_num(int);
+    void set_se_trade_off(double);
     void init();
     void reset_emb_eqv();
     void run();
@@ -667,6 +668,14 @@ void PRModule::enable_emb_eqv(bool flag) {
     paris_params -> ENABLE_EMB_EQV = flag;
 }
 
+void PRModule::set_ent_candidate_num(int num) {
+    paris_params -> ENT_CANDIDATE_NUM = num;
+}
+
+void PRModule::set_se_trade_off(double trade_off) {
+    paris_params -> EMB_EQV_TRADE_OFF = trade_off;
+}
+
 void PRModule::init() {
     kg_a -> init_functionalities();
     kg_b -> init_functionalities();
@@ -674,7 +683,7 @@ void PRModule::init() {
 }
 
 void PRModule::reset_emb_eqv() {
-    emb_eqv -> init(paris_params -> ENT_CANDIDATE_NUM);
+    emb_eqv -> init(paris_params -> MAX_EMB_EQV_CACHE_NUM);
 }
 
 void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b, double prob) {
@@ -891,7 +900,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                     double trade_off = _this -> paris_params -> EMB_EQV_TRADE_OFF;
                     double emb_eqv = _this -> emb_eqv -> get_emb_eqv(ent_id, ent_cp_candidate);
                     ent_cp_eqv = (1.0 - trade_off) * ent_cp_eqv + trade_off * emb_eqv;    
-                    // std::cout<<emb_eqv<<std::endl;
                 }
 
                 if (ent_cp_eqv < 0.0) {
@@ -1053,6 +1061,8 @@ PYBIND11_MODULE(prase_core, m)
     .def("insert_lite_eqv", &PRModule::insert_lite_eqv)
     .def("set_worker_num", &PRModule::set_worker_num)
     .def("set_emb_cache_capacity", &PRModule::set_emb_cache_capacity)
+    .def("set_se_trade_off", &PRModule::set_se_trade_off)
+    .def("set_ent_candidate_num", &PRModule::set_ent_candidate_num)
     .def("reset_emb_eqv", &PRModule::reset_emb_eqv)
     .def("enable_rel_init", &PRModule::enable_rel_init)
     .def("enable_emb_eqv", &PRModule::enable_emb_eqv)

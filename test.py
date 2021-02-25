@@ -44,17 +44,17 @@ def load_embeds(kg: KG, ent_emb_path, kg_ent_mappings):
             kg.insert_ent_embed(ent_name, ent_emb[idx, :])
 
 
-path_r_1 = r"D:\repos\PARIS-PYTHON\dataset\EN_DE_100K_V2\rel_triples_1"
-path_r_2 = r"D:\repos\PARIS-PYTHON\dataset\EN_DE_100K_V2\rel_triples_2"
+path_r_1 = r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\rel_triples_1"
+path_r_2 = r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\rel_triples_2"
 
-path_a_1 = r"D:\repos\PARIS-PYTHON\dataset\EN_DE_100K_V2\attr_triples_1"
-path_a_2 = r"D:\repos\PARIS-PYTHON\dataset\EN_DE_100K_V2\attr_triples_2"
+path_a_1 = r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\attr_triples_1"
+path_a_2 = r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\attr_triples_2"
 
-test_path = r"D:\repos\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links"
+test_path = r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links"
 
-ent_emb_path = r"F:\ACL\PARIS_OUTPUT_SEEDS\THRESHOLD=0.1\RESULT\MultiKE\output\results\MultiKE\EN_DE_100K_V2\20210105162612\ent_embeds.npy"
-ent_a_mapping_path = r"F:\ACL\PARIS_OUTPUT_SEEDS\THRESHOLD=0.1\RESULT\MultiKE\output\results\MultiKE\EN_DE_100K_V2\20210105162612\kg1_ent_ids"
-ent_b_mapping_path = r"F:\ACL\PARIS_OUTPUT_SEEDS\THRESHOLD=0.1\RESULT\MultiKE\output\results\MultiKE\EN_DE_100K_V2\20210105162612\kg2_ent_ids"
+ent_emb_path = r"D:\repos\self\PARIS-PYTHON\output\EN_DE_100K_V2\IMUSE\ent_embeds.npy"
+ent_a_mapping_path = r"D:\repos\self\PARIS-PYTHON\output\EN_DE_100K_V2\IMUSE\kg1_ent_ids"
+ent_b_mapping_path = r"D:\repos\self\PARIS-PYTHON\output\EN_DE_100K_V2\IMUSE\kg2_ent_ids"
 
 start = time.time()
 
@@ -69,14 +69,14 @@ load_embeds(kg2, ent_emb_path, ent_b_mapping_path)
 kgs = KGs.KGs(kg1, kg2)
 
 # kgs.pr.set_rel_func_bar(0.2)
-kgs.pr.enable_emb_eqv(False)
+kgs.pr.enable_emb_eqv(True)
 # kgs.pr.set_ent_candidate_num(5)
 
 kgs.init()
 # kgs.pr.set_worker_num(6)
 kgs.run()
 
-print(kgs.pr.get_kg_a_unaligned_ents())
+print(len(kgs.pr.get_kg_a_unaligned_ents()))
 
 kgs.test(test_path, [0.1 * i for i in range(10)])
 

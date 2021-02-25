@@ -33,6 +33,8 @@
 
 *.pyd
 
+setup.py
+
 /build
 /.vscode
 /dist

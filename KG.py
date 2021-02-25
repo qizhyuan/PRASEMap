@@ -116,3 +116,10 @@ class KG:
         self.kg_core.insert_attr_triple(h_id, a_id, t_id)
         a_inv_id = self.get_inv_rel_id(a_id)
         self.kg_core.insert_attr_inv_triple(h_id, a_inv_id, t_id)
+
+    def insert_ent_embed(self, ent_name, emb):
+        ent_id = self.get_ent_id_without_insert(ent_name)
+        if ent_id is not None:
+            self.kg_core.set_ent_embed(ent_id, emb)
+        else:
+            print("error")

@@ -4,6 +4,7 @@ functions_module = Extension(
     name ='prase_core',
     sources = ['prase_core.cpp'],
     include_dirs = [r'D:\repos\pybind11-2.6\include',
+                    r"D:\repos\eigen-3.3.9",
                    r'C:\ProgramData\Anaconda3\include']
 # include_dirs 中的路径 更改为自己虚拟环境下相应 pybind11的路径 和 python的include路径
 )

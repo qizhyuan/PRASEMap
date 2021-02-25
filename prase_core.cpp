@@ -333,14 +333,17 @@ public:
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void update_rel_eqv(int);
-    void update_ent_eqv();
+    void update_ent_eqv(bool);
     void reset_ongoing_mp();
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
     std::mutex ent_eqv_lock;
-    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
+    std::vector<uint64_t>& get_kg_a_unaligned_ents();
+    std::vector<uint64_t>& get_kg_b_unaligned_ents();
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_lite_eqv_mp();
 private:
+    KG *kg_a, *kg_b;
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
     static double get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t);
@@ -348,14 +351,19 @@ private:
     static std::unordered_map<uint64_t, double> EMPTY_EQV_MAP;
     std::vector<std::tuple<uint64_t, uint64_t, double>> ent_eqv_tuples;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ent_eqv_mp;
-    
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> rel_eqv_mp;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
     std::unordered_map<uint64_t, double> ongoing_rel_norm;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_rel_deno;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ongoing_ent_eqv_mp;
+    std::vector<uint64_t> kg_a_unaligned_ents;
+    std::vector<uint64_t> kg_b_unaligned_ents;
 };
 
 PARISEquiv::PARISEquiv(KG* kg_a, KG* kg_b) {
+    this -> kg_a = kg_a;
+    this -> kg_b = kg_b;
+
     uint64_t min_lite_num = std::min(kg_a -> get_lite_set().size(), kg_b -> get_lite_set().size());
     uint64_t reserve_space = (uint64_t) (0.2 * (double) min_lite_num);
     lite_eqv_mp.reserve(reserve_space);
@@ -381,6 +389,14 @@ PARISEquiv::PARISEquiv(KG* kg_a, KG* kg_b) {
 
 std::unordered_map<uint64_t, double> PARISEquiv::EMPTY_EQV_MAP = std::unordered_map<uint64_t, double>();
 
+std::vector<uint64_t>& PARISEquiv::get_kg_a_unaligned_ents() {
+    return kg_a_unaligned_ents;
+}
+
+std::vector<uint64_t>& PARISEquiv::get_kg_b_unaligned_ents() {
+    return kg_b_unaligned_ents;
+}
+
 void PARISEquiv::insert_lite_equiv(uint64_t lite_id_a, uint64_t lite_id_b, double prob) {
     insert_value_to_mp_mp(this -> lite_eqv_mp, lite_id_a, lite_id_b, prob);
 }
@@ -404,8 +420,12 @@ double PARISEquiv::get_rel_equiv(uint64_t rel_id, uint64_t rel_cp_id) {
     return get_value_from_mp_mp(rel_eqv_mp, rel_id, rel_cp_id);
 }
 
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& PARISEquiv::get_lite_eqv_mp() {
+    return lite_eqv_mp;
+}
+
 std::unordered_map<uint64_t, double>* PARISEquiv::get_ent_cp_map_ptr(KG *source, uint64_t ent_id) {
-    if (source ->is_literal(ent_id)) {
+    if (source -> is_literal(ent_id)) {
         if (lite_eqv_mp.count(ent_id)) {
             return &lite_eqv_mp[ent_id];
         }
@@ -492,7 +512,7 @@ void PARISEquiv::update_rel_eqv(int norm_const) {
     }
 }
 
-void PARISEquiv::update_ent_eqv() {
+void PARISEquiv::update_ent_eqv(bool update_unaligned_ents) {
     std::vector<std::tuple<uint64_t, uint64_t, double>> new_ent_eqv_tuples;
     std::unordered_set<uint64_t> visited;
 
@@ -529,6 +549,24 @@ void PARISEquiv::update_ent_eqv() {
             visited.insert(cp_id);
         }
     }
+
+    if (update_unaligned_ents) {
+        kg_a_unaligned_ents.clear();
+        kg_b_unaligned_ents.clear();
+
+        for (auto ent_id : kg_a -> get_ent_set()) {
+            if (!visited.count(ent_id)) {
+                kg_a_unaligned_ents.push_back(ent_id);
+            }
+        }
+
+        for (auto ent_id : kg_b -> get_ent_set()) {
+            if (!visited.count(ent_id)) {
+                kg_b_unaligned_ents.push_back(ent_id);
+            }
+        }
+    }
+
 }
 
 void PARISEquiv::reset_ongoing_mp() {
@@ -578,6 +616,7 @@ struct PARISParams {
     double PENALTY_VALUE;
     double ENT_REGISTER_THRESHOLD;
     double EMB_EQV_TRADE_OFF;
+    double INV_FUNCTIONALITY_THRESHOLD;
     int INIT_ITERATION;
     int ENT_CANDIDATE_NUM;
     int SMOOTH_NORM;
@@ -609,6 +648,7 @@ PARISParams::PARISParams() {
     MAX_ITERATION_NUM = 10;
     MAX_EMB_EQV_CACHE_NUM = 1000000;
     EMB_EQV_TRADE_OFF = 0.2;
+    INV_FUNCTIONALITY_THRESHOLD = 0.05;
 }
 
 
@@ -623,11 +663,14 @@ public:
     void set_worker_num(int);
     void set_emb_cache_capacity(uint64_t);
     void set_ent_candidate_num(int);
+    void set_rel_func_bar(double);
     void set_se_trade_off(double);
     void init();
     void reset_emb_eqv();
     void run();
     std::vector<std::tuple<uint64_t, uint64_t, double>> & get_ent_eqv_result();
+    std::vector<uint64_t>& get_kg_a_unaligned_ents();
+    std::vector<uint64_t>& get_kg_b_unaligned_ents();
 private:
     int iteration;
     bool enable_relation_init;
@@ -674,6 +717,19 @@ void PRModule::set_ent_candidate_num(int num) {
 
 void PRModule::set_se_trade_off(double trade_off) {
     paris_params -> EMB_EQV_TRADE_OFF = trade_off;
+}
+
+void PRModule::set_rel_func_bar(double threshold) {
+    paris_params -> INV_FUNCTIONALITY_THRESHOLD = threshold;
+}
+
+std::vector<uint64_t>& PRModule::get_kg_a_unaligned_ents() {
+    return paris_eqv -> get_kg_a_unaligned_ents();
+}
+
+
+std::vector<uint64_t>& PRModule::get_kg_b_unaligned_ents() {
+    return paris_eqv -> get_kg_b_unaligned_ents();
 }
 
 void PRModule::init() {
@@ -828,6 +884,11 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
         for (auto iter = rel_tail_pairs_ptr -> begin(); iter != rel_tail_pairs_ptr -> end(); ++iter) {
             uint64_t relation = iter -> first;
+
+            if (kg_l -> get_inv_functionality(relation) < _this -> paris_params -> INV_FUNCTIONALITY_THRESHOLD) {
+                continue;
+            }
+
             uint64_t tail = iter -> second;
             std::unordered_map<uint64_t, double>* tail_cp_ptr = get_cp_map_ptr(tail);
 
@@ -891,7 +952,8 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
 
         std::function<void()> update_ent_eqv = [&]() {
-            std::stack<std::pair<uint64_t, double>> st1, st2;
+            std::vector<std::pair<uint64_t, double>> st1, st2;
+
             for (auto iter = ent_ongoing_eqv.begin(); iter != ent_ongoing_eqv.end(); ++iter) {
                 uint64_t ent_cp_candidate = iter -> first;
                 double ent_cp_eqv = 1.0 - (iter -> second);
@@ -912,18 +974,18 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
                 ent_cp_eqv = _this -> get_filtered_prob(ent_id, ent_cp_candidate, ent_cp_eqv);
                 
-                while (!st1.empty() && st1.top().second < ent_cp_eqv) {
-                    st2.push(st1.top());
-                    st1.pop();
+                while (!st1.empty() && st1.back().second < ent_cp_eqv) {
+                    st2.emplace_back(st1.back());
+                    st1.pop_back();
                 }
                 
                 if (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM) {
-                    st1.push(std::make_pair(ent_cp_candidate, ent_cp_eqv));
+                    st1.emplace_back(std::make_pair(ent_cp_candidate, ent_cp_eqv));
                 }
                 
                 while (st1.size() < _this -> paris_params -> ENT_CANDIDATE_NUM && !st2.empty()) {
-                    st1.push(st2.top());
-                    st2.pop();
+                    st1.emplace_back(st2.back());
+                    st2.pop_back();
                 }
             }
             
@@ -931,8 +993,8 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                 if (!ent_eqv_result.count(ent_id)) {
                     ent_eqv_result[ent_id] = std::unordered_map<uint64_t, double>();
                 }
-                ent_eqv_result[ent_id][st1.top().first] = st1.top().second;
-                st1.pop();
+                ent_eqv_result[ent_id][st1.back().first] = st1.back().second;
+                st1.pop_back();
             }
 
             ent_ongoing_eqv.clear();
@@ -1012,10 +1074,11 @@ void PRModule::one_iteration() {
 
 
     std::cout<<"update_ent_eqv"<<std::endl;
-    paris_eqv -> update_ent_eqv();
+    bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
+    paris_eqv -> update_ent_eqv(update_unaligned_ents);
 
     std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
-    std::cout<<"lite align num: "<<paris_eqv -> lite_eqv_mp.size()<<std::endl;
+    std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
 
     set_ent_queue(kg_b);
     std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
@@ -1036,15 +1099,10 @@ void PRModule::iterations() {
 }
 
 
-
-
-
-
 PYBIND11_MODULE(prase_core, m)
 {
     m.doc() = "Probabilistic Reasoning and Semantic Embedding";
 
-    // m.def("add", &add, "A function which adds two numbers");
 
     py::class_<KG>(m, "KG").def(py::init()).def("insert_rel_triple", &KG::insert_rel_triple)
     .def("insert_rel_inv_triple", &KG::insert_rel_inv_triple)
@@ -1063,9 +1121,12 @@ PYBIND11_MODULE(prase_core, m)
     .def("set_emb_cache_capacity", &PRModule::set_emb_cache_capacity)
     .def("set_se_trade_off", &PRModule::set_se_trade_off)
     .def("set_ent_candidate_num", &PRModule::set_ent_candidate_num)
+    .def("set_rel_func_bar", &PRModule::set_rel_func_bar)
     .def("reset_emb_eqv", &PRModule::reset_emb_eqv)
     .def("enable_rel_init", &PRModule::enable_rel_init)
     .def("enable_emb_eqv", &PRModule::enable_emb_eqv)
+    .def("get_kg_a_unaligned_ents", &PRModule::get_kg_a_unaligned_ents)
+    .def("get_kg_b_unaligned_ents", &PRModule::get_kg_b_unaligned_ents)
     .def("run", &PRModule::run)
     .def("get_ent_eqv_result", &PRModule::get_ent_eqv_result)
     ;

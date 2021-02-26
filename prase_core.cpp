@@ -60,6 +60,7 @@ public:
     void test();
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_tail_pairs_ptr(uint64_t);
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_head_pairs_ptr(uint64_t);
+    std::set<std::pair<uint64_t, uint64_t>>* get_rel_ent_head_pairs_ptr(uint64_t);
     std::set<uint64_t>& get_ent_set();
     std::set<uint64_t>& get_lite_set();
     std::set<uint64_t>& get_rel_set();
@@ -78,6 +79,7 @@ private:
     std::unordered_map<uint64_t, Eigen::VectorXd> ent_emb_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> h_r_t_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_mp;
+    std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_ent_mp;
     std::unordered_map<uint64_t, double> functionality_mp;
     std::unordered_map<uint64_t, double> inv_functionality_mp;
     static std::set<std::pair<uint64_t, uint64_t>> EMPTY_PAIR_SET;
@@ -101,6 +103,7 @@ void KG::insert_rel_triple(uint64_t head, uint64_t relation, uint64_t tail) {
     rel_set.insert(relation);
     insert_triple(this -> h_r_t_mp, head, relation, tail);
     insert_triple(this -> t_r_h_mp, tail, relation, head);
+    insert_triple(this -> t_r_h_ent_mp, tail, relation, head);
 }
 
 void KG::insert_rel_inv_triple(uint64_t head, uint64_t relation_inv, uint64_t tail) {
@@ -113,6 +116,7 @@ void KG::insert_attr_triple(uint64_t entity, uint64_t attribute, uint64_t litera
     attr_set.insert(attribute);
     insert_triple(this -> h_r_t_mp, entity, attribute, literal);
     insert_triple(this -> t_r_h_mp, literal, attribute, entity);
+    insert_triple(this -> t_r_h_ent_mp, literal, attribute, entity);
 }
 
 void KG::insert_attr_inv_triple(uint64_t entity, uint64_t attribute_inv, uint64_t literal) {
@@ -143,6 +147,13 @@ std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_head_pairs_ptr(uint64_t tai
         return &EMPTY_PAIR_SET;
     }
     return &t_r_h_mp[tail_id];
+}
+
+std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_ent_head_pairs_ptr(uint64_t tail_id) {
+    if (!t_r_h_ent_mp.count(tail_id)) {
+        return &EMPTY_PAIR_SET;
+    }
+    return &t_r_h_ent_mp[tail_id];
 }
 
 std::set<uint64_t>& KG::get_ent_set() {
@@ -843,7 +854,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
             }
         }
 
-
         double inv_functionality_l = kg_l -> get_inv_functionality(rel_id);
         double inv_functionality_r = kg_r -> get_inv_functionality(rel_cp_id);
 
@@ -909,14 +919,10 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                     rel_ongoing_norm_factor *= (1.0 - head_eqv_prob * tail_eqv_prob);
                 }
 
-                std::set<std::pair<uint64_t, uint64_t>>* rel_head_pairs_ptr = kg_r -> get_rel_head_pairs_ptr(tail_cp);
+                std::set<std::pair<uint64_t, uint64_t>>* rel_ent_head_pairs_ptr = kg_r -> get_rel_ent_head_pairs_ptr(tail_cp);
 
-                for (auto sub_iter = rel_head_pairs_ptr -> begin(); sub_iter != rel_head_pairs_ptr -> end(); ++sub_iter) {
+                for (auto sub_iter = rel_ent_head_pairs_ptr -> begin(); sub_iter != rel_ent_head_pairs_ptr -> end(); ++sub_iter) {
                     uint64_t head_cp_candidate = sub_iter -> second;
-
-                    if (kg_r -> is_literal(head_cp_candidate)) {
-                        continue;
-                    }
 
                     uint64_t relation_cp_candidate = sub_iter -> first;
 

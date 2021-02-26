@@ -4,6 +4,7 @@ import re
 
 class KG:
     component_id = 0
+    # extra_name_attr = "generated name attribute"
 
     def __init__(self, name="KG", ent_pre_func=None, rel_pre_func=None, attr_pre_func=None,
                  lite_pre_func=None):
@@ -123,3 +124,6 @@ class KG:
             self.kg_core.set_ent_embed(ent_id, emb)
         else:
             print("error")
+
+    def clear_ent_embed(self):
+        self.kg_core.clear_ent_embeds()

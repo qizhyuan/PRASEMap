@@ -3,6 +3,8 @@ import prase_core as pc
 
 
 class KGs:
+    default_lite_align_prob = 0.99
+
     def __init__(self, kg1: KG, kg2: KG):
         self.kg1 = kg1
         self.kg2 = kg2
@@ -11,21 +13,46 @@ class KGs:
         self.__init()
 
     def __init(self):
-        # print(self.kg1.lite_id_name_dict)
-        # print(self.kg2.lite_id_name_dict)
         for (lite_id, lite_name) in self.kg1.lite_id_name_dict.items():
-            # print(lite_name)
             if self.kg2.name_lite_id_dict.__contains__(lite_name):
-                # print(lite_id)
                 lite_cp_id = self.kg2.name_lite_id_dict[lite_name]
-                self.pr.insert_lite_eqv(lite_id, lite_cp_id, 0.99, False)
-                self.pr.insert_lite_eqv(lite_cp_id, lite_id, 0.99, False)
+                self.pr.insert_lite_eqv(lite_id, lite_cp_id, KGs.default_lite_align_prob, False)
+                self.pr.insert_lite_eqv(lite_cp_id, lite_id, KGs.default_lite_align_prob, False)
 
     def init(self):
         self.pr.init()
 
-    def run(self):
+    def run_pr(self):
         self.pr.run()
+
+    def insert_forced_ent_eqv(self, ent_name, ent_cp_name, prob):
+        ent_id = self.kg1.get_ent_id_without_insert(ent_name)
+        ent_cp_id = self.kg2.get_ent_id_without_insert(ent_cp_name)
+        if ent_id is None or ent_cp_id is None:
+            print("fail to get ent ids")
+            return
+        self.pr.insert_ent_eqv(ent_id, ent_cp_id, prob, True)
+        self.pr.insert_ent_eqv(ent_cp_id, ent_id, prob, True)
+
+    def insert_ent_eqv(self, ent_name, ent_cp_name, prob):
+        ent_id = self.kg1.get_ent_id_without_insert(ent_name)
+        ent_cp_id = self.kg2.get_ent_id_without_insert(ent_cp_name)
+        if ent_id is None or ent_cp_id is None:
+            print("fail to get ent ids")
+            return
+        self.pr.insert_ent_eqv(ent_id, ent_cp_id, prob, False)
+        self.pr.insert_ent_eqv(ent_cp_id, ent_id, prob, False)
+
+    def get_kg1_unaligned_candidates(self):
+        return self.pr.get_kg_a_unaligned_ents()
+
+    def get_kg2_unaligned_candidates(self):
+        return self.pr.get_kg_b_unaligned_ents()
+
+    def clear_kgs_ent_embed(self):
+        self.kg1.clear_ent_embed()
+        self.kg2.clear_ent_embed()
+        self.pr.reset_emb_eqv()
 
     def print_result(self):
         for item in self.pr.get_ent_eqv_result():

@@ -60,10 +60,13 @@ public:
     void test();
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_tail_pairs_ptr(uint64_t);
     std::set<std::pair<uint64_t, uint64_t>>* get_rel_head_pairs_ptr(uint64_t);
+    std::set<std::pair<uint64_t, uint64_t>>* get_rel_ent_head_pairs_ptr(uint64_t);
     std::set<uint64_t>& get_ent_set();
     std::set<uint64_t>& get_lite_set();
     std::set<uint64_t>& get_rel_set();
     std::set<uint64_t>& get_attr_set();
+    std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& get_relation_triples();
+    std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& get_attribute_triples();
     double get_functionality(uint64_t);
     double get_inv_functionality(uint64_t);
     void init_functionalities();
@@ -78,6 +81,9 @@ private:
     std::unordered_map<uint64_t, Eigen::VectorXd> ent_emb_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> h_r_t_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_mp;
+    std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_ent_mp;
+    std::set<std::tuple<uint64_t, uint64_t, uint64_t>> relation_triples;
+    std::set<std::tuple<uint64_t, uint64_t, uint64_t>> attribute_triples;
     std::unordered_map<uint64_t, double> functionality_mp;
     std::unordered_map<uint64_t, double> inv_functionality_mp;
     static std::set<std::pair<uint64_t, uint64_t>> EMPTY_PAIR_SET;
@@ -99,8 +105,10 @@ void KG::insert_rel_triple(uint64_t head, uint64_t relation, uint64_t tail) {
     ent_set.insert(head);
     ent_set.insert(tail);
     rel_set.insert(relation);
+    relation_triples.insert(std::make_tuple(head, relation, tail));
     insert_triple(this -> h_r_t_mp, head, relation, tail);
     insert_triple(this -> t_r_h_mp, tail, relation, head);
+    insert_triple(this -> t_r_h_ent_mp, tail, relation, head);
 }
 
 void KG::insert_rel_inv_triple(uint64_t head, uint64_t relation_inv, uint64_t tail) {
@@ -111,17 +119,21 @@ void KG::insert_attr_triple(uint64_t entity, uint64_t attribute, uint64_t litera
     ent_set.insert(entity);
     lite_set.insert(literal);
     attr_set.insert(attribute);
+    attribute_triples.insert(std::make_tuple(entity, attribute, literal));
     insert_triple(this -> h_r_t_mp, entity, attribute, literal);
     insert_triple(this -> t_r_h_mp, literal, attribute, entity);
+    insert_triple(this -> t_r_h_ent_mp, literal, attribute, entity);
 }
 
 void KG::insert_attr_inv_triple(uint64_t entity, uint64_t attribute_inv, uint64_t literal) {
     ent_set.insert(entity);
     lite_set.insert(literal);
     attr_set.insert(attribute_inv);
+    attribute_triples.insert(std::make_tuple(literal, attribute_inv, entity));
     insert_triple(this -> h_r_t_mp, literal, attribute_inv, entity);
     insert_triple(this -> t_r_h_mp, entity, attribute_inv, literal);
 }
+
 
 bool KG::is_attribute(uint64_t rel_id) {
     return !rel_set.count(rel_id);
@@ -145,6 +157,13 @@ std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_head_pairs_ptr(uint64_t tai
     return &t_r_h_mp[tail_id];
 }
 
+std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_ent_head_pairs_ptr(uint64_t tail_id) {
+    if (!t_r_h_ent_mp.count(tail_id)) {
+        return &EMPTY_PAIR_SET;
+    }
+    return &t_r_h_ent_mp[tail_id];
+}
+
 std::set<uint64_t>& KG::get_ent_set() {
     return ent_set;
 }
@@ -162,6 +181,10 @@ std::set<uint64_t>& KG::get_attr_set() {
 }
 
 double KG::get_functionality(uint64_t rel_id) {
+    if (functionality_mp.empty()) {
+        init_functionalities();
+    }
+
     double functionality = 0.0;
     if (functionality_mp.count(rel_id)) {
         functionality = functionality_mp[rel_id];
@@ -170,12 +193,25 @@ double KG::get_functionality(uint64_t rel_id) {
 }
 
 double KG::get_inv_functionality(uint64_t rel_id) {
+    if (inv_functionality_mp.empty()) {
+        init_functionalities();
+    }
+    
     double inv_functionality = 0.0;
     if (inv_functionality_mp.count(rel_id)) {
         inv_functionality = inv_functionality_mp[rel_id];
     }
     return inv_functionality;
 }
+
+std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& KG::get_relation_triples() {
+    return relation_triples;
+}
+
+std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& KG::get_attribute_triples() {
+    return attribute_triples;
+}
+
 
 void KG::test() {
     init_functionalities();
@@ -238,6 +274,7 @@ void KG::clear_ent_embeds() {
 
 void KG::set_ent_embed(uint64_t ent_id, Eigen::VectorXd &embeds) {
     ent_emb_mp[ent_id] = embeds;
+    // std::cout<<embeds<<std::endl;
 }
 
 Eigen::VectorXd& KG::get_ent_embs(uint64_t ent_id) {
@@ -342,6 +379,7 @@ public:
     std::vector<uint64_t>& get_kg_a_unaligned_ents();
     std::vector<uint64_t>& get_kg_b_unaligned_ents();
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_lite_eqv_mp();
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_forced_eqv_mp();
 private:
     KG *kg_a, *kg_b;
     double get_entity_equiv(uint64_t, uint64_t);
@@ -350,6 +388,7 @@ private:
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
     static std::unordered_map<uint64_t, double> EMPTY_EQV_MAP;
     std::vector<std::tuple<uint64_t, uint64_t, double>> ent_eqv_tuples;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> ent_eqv_mp;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> rel_eqv_mp;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> lite_eqv_mp;
@@ -422,6 +461,10 @@ double PARISEquiv::get_rel_equiv(uint64_t rel_id, uint64_t rel_cp_id) {
 
 std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& PARISEquiv::get_lite_eqv_mp() {
     return lite_eqv_mp;
+}
+
+std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& PARISEquiv::get_forced_eqv_mp() {
+    return forced_eqv_mp;
 }
 
 std::unordered_map<uint64_t, double>* PARISEquiv::get_ent_cp_map_ptr(KG *source, uint64_t ent_id) {
@@ -518,6 +561,21 @@ void PARISEquiv::update_ent_eqv(bool update_unaligned_ents) {
 
     for (auto iter = ongoing_ent_eqv_mp.begin(); iter != ongoing_ent_eqv_mp.end(); ++iter) {
         uint64_t id = iter -> first;
+        std::unordered_map<uint64_t, double>& cp_map = iter -> second;
+
+        for (auto sub_iter = cp_map.begin(); sub_iter != cp_map.end(); ++sub_iter) {
+            uint64_t cp_id = sub_iter -> first;
+            double prob = sub_iter -> second;
+            new_ent_eqv_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
+        }
+    }
+
+    for (auto iter = forced_eqv_mp.begin(); iter != forced_eqv_mp.end(); ++iter) {
+        uint64_t id = iter -> first;
+        if (!kg_a -> get_ent_set().count(id)) {
+            continue;
+        }
+
         std::unordered_map<uint64_t, double>& cp_map = iter -> second;
 
         for (auto sub_iter = cp_map.begin(); sub_iter != cp_map.end(); ++sub_iter) {
@@ -679,7 +737,6 @@ private:
     EmbedEquiv* emb_eqv;
     KG *kg_a, *kg_b;
     SpinLock queue_lock;
-    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
     double get_filtered_prob(uint64_t, uint64_t, double);
     bool is_rel_init();
@@ -740,6 +797,7 @@ void PRModule::init() {
 
 void PRModule::reset_emb_eqv() {
     emb_eqv -> init(paris_params -> MAX_EMB_EQV_CACHE_NUM);
+    
 }
 
 void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b, double prob) {
@@ -752,21 +810,21 @@ void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered
 void PRModule::insert_ent_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
     paris_eqv -> insert_ent_equiv(id_a, id_b, prob);
     if (forced) {
-        insert_value_to_mp_mp(this -> forced_eqv_mp, id_a, id_b, prob);
+        insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
 }
 
 void PRModule::insert_lite_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
     paris_eqv -> insert_lite_equiv(id_a, id_b, prob);
     if (forced) {
-        insert_value_to_mp_mp(this -> forced_eqv_mp, id_a, id_b, prob);
+        insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
 }
 
 void PRModule::insert_rel_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
     paris_eqv -> insert_rel_equiv(id_a, id_b, prob);
     if (forced) {
-        insert_value_to_mp_mp(this -> forced_eqv_mp, id_a, id_b, prob);
+        insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
 }
 
@@ -783,6 +841,7 @@ void PRModule::run() {
 }
 
 double PRModule::get_filtered_prob(uint64_t id_a, uint64_t id_b, double prob) {
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& forced_eqv_mp = paris_eqv -> get_forced_eqv_mp();
     if (forced_eqv_mp.count(id_a)) {
         if (forced_eqv_mp[id_a].count(id_b)) {
             prob = forced_eqv_mp[id_a][id_b];
@@ -834,6 +893,9 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
         rel_eqv_sub /= _this -> paris_params -> PENALTY_VALUE;
         rel_eqv_sup /= _this -> paris_params -> PENALTY_VALUE;
 
+        rel_eqv_sub = _this -> get_filtered_prob(rel_id, rel_cp_id, rel_eqv_sub);
+        rel_eqv_sup = _this -> get_filtered_prob(rel_cp_id, rel_id, rel_eqv_sub);
+
         if (rel_eqv_sub < _this -> paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < _this -> paris_params -> REL_EQV_THRESHOLD) {
             if (_this -> is_rel_init()) {
                 rel_eqv_sup = _this -> paris_params -> REL_EQV_THRESHOLD;
@@ -842,7 +904,6 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                 return;
             }
         }
-
 
         double inv_functionality_l = kg_l -> get_inv_functionality(rel_id);
         double inv_functionality_r = kg_r -> get_inv_functionality(rel_cp_id);
@@ -909,14 +970,10 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                     rel_ongoing_norm_factor *= (1.0 - head_eqv_prob * tail_eqv_prob);
                 }
 
-                std::set<std::pair<uint64_t, uint64_t>>* rel_head_pairs_ptr = kg_r -> get_rel_head_pairs_ptr(tail_cp);
+                std::set<std::pair<uint64_t, uint64_t>>* rel_ent_head_pairs_ptr = kg_r -> get_rel_ent_head_pairs_ptr(tail_cp);
 
-                for (auto sub_iter = rel_head_pairs_ptr -> begin(); sub_iter != rel_head_pairs_ptr -> end(); ++sub_iter) {
+                for (auto sub_iter = rel_ent_head_pairs_ptr -> begin(); sub_iter != rel_ent_head_pairs_ptr -> end(); ++sub_iter) {
                     uint64_t head_cp_candidate = sub_iter -> second;
-
-                    if (kg_r -> is_literal(head_cp_candidate)) {
-                        continue;
-                    }
 
                     uint64_t relation_cp_candidate = sub_iter -> first;
 
@@ -1063,13 +1120,14 @@ void PRModule::one_iteration() {
         for (uint64_t ent : ents) {
             ent_queue.push(ent);
         }
+        std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     };
 
     std::cout<<"iteration num: "<<iteration<<std::endl;
 
     std::cout<<"one_iteration_one_way"<<std::endl;
     set_ent_queue(kg_a);
-    std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
+    // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     one_iteration_one_way(ent_queue, kg_a, kg_b, true);
 
 
@@ -1081,7 +1139,7 @@ void PRModule::one_iteration() {
     std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
 
     set_ent_queue(kg_b);
-    std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
+    // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
 
     std::cout<<"one_iteration_one_way"<<std::endl;
     one_iteration_one_way(ent_queue, kg_b, kg_a, false);
@@ -1108,6 +1166,14 @@ PYBIND11_MODULE(prase_core, m)
     .def("insert_rel_inv_triple", &KG::insert_rel_inv_triple)
     .def("insert_attr_triple", &KG::insert_attr_triple)
     .def("insert_attr_inv_triple", &KG::insert_attr_inv_triple)
+    .def("get_functionality", &KG::get_functionality)
+    .def("get_inv_functionality", &KG::get_inv_functionality)
+    .def("get_relation_triples", &KG::get_relation_triples)
+    .def("get_attribute_triples", &KG::get_attribute_triples)
+    .def("get_ent_set", &KG::get_ent_set)
+    .def("get_rel_set", &KG::get_rel_set)
+    .def("get_lite_set", &KG::get_lite_set)
+    .def("get_attr_set", &KG::get_attr_set)
     .def("set_ent_embed", &KG::set_ent_embed)
     .def("clear_ent_embeds", &KG::clear_ent_embeds)
     .def("test", &KG::test)

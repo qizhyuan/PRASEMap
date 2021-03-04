@@ -1,2 +1,4 @@
-numpy~=1.18.5
-setuptools~=49.2.0
+numpy~=1.19.2
+setuptools~=47.1.0
+networkx~=2.5
+scipy~=1.6.1

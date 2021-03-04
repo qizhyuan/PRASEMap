@@ -4,6 +4,7 @@ import re
 
 class KG:
     component_id = 0
+    # extra_name_attr = "generated name attribute"
 
     def __init__(self, name="KG", ent_pre_func=None, rel_pre_func=None, attr_pre_func=None,
                  lite_pre_func=None):
@@ -123,3 +124,43 @@ class KG:
             self.kg_core.set_ent_embed(ent_id, emb)
         else:
             print("error")
+
+    def insert_ent_embed_by_id(self, ent_id, emb):
+        if ent_id is not None:
+            self.kg_core.set_ent_embed(ent_id, emb)
+        else:
+            print("error")
+
+    def get_relation_id_triples(self) -> set:
+        return self.kg_core.get_relation_triples()
+
+    def get_attribute_id_triples(self) -> set:
+        return self.kg_core.get_attribute_triples()
+
+    def clear_ent_embed(self):
+        self.kg_core.clear_ent_embeds()
+
+    def get_ent_id_set(self):
+        return self.kg_core.get_ent_set()
+
+    def get_rel_id_set(self):
+        return self.kg_core.get_rel_set()
+
+    def get_lite_id_set(self):
+        return self.kg_core.get_lite_set()
+
+    def get_attr_id_set(self):
+        return self.kg_core.get_attr_set()
+
+    def get_functionality(self, idx):
+        return self.kg_core.get_functionality(idx)
+
+    def get_inv_functionality(self, idx):
+        return self.kg_core.get_inv_functionality(idx)
+
+    def get_ent_name_by_id(self, idx):
+        return self.ent_id_name_dict[idx]
+
+    @staticmethod
+    def reset_component_id():
+        KG.component_id = 0

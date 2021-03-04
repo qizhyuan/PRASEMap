@@ -4,7 +4,7 @@ import re
 
 class KG:
     component_id = 0
-    # extra_name_attr = "generated name attribute"
+    suffix_for_inv_rel = "-(inv)"
 
     def __init__(self, name="KG", ent_pre_func=None, rel_pre_func=None, attr_pre_func=None,
                  lite_pre_func=None):
@@ -79,24 +79,39 @@ class KG:
             inv_dictionary[generated_id] = name
         return dictionary[name]
 
-    def get_ent_id(self, name):
+    def get_or_insert_ent_id(self, name):
         return self.get_id_from_name_helper(self.name_ent_id_dict, self.ent_id_name_dict, name)
 
-    def get_rel_id(self, name):
+    def get_or_insert_rel_id(self, name):
         return self.get_id_from_name_helper(self.name_rel_id_dict, self.rel_id_name_dict, name)
 
-    def get_attr_id(self, name):
+    def get_or_insert_attr_id(self, name):
         return self.get_id_from_name_helper(self.name_attr_id_dict, self.attr_id_name_dict, name)
 
-    def get_lite_id(self, name):
+    def get_or_insert_lite_id(self, name):
         return self.get_id_from_name_helper(self.name_lite_id_dict, self.lite_id_name_dict, name)
 
-    def get_ent_id_without_insert(self, name):
+    def get_ent_id_by_name(self, name):
         ent_name = self.ent_pre_func(name)
         if self.name_ent_id_dict.__contains__(ent_name):
             return self.name_ent_id_dict[ent_name]
 
-    def get_inv_rel_id(self, rel_id):
+    def get_lite_id_by_name(self, name):
+        lite_name = self.rel_pre_func(name)
+        if self.name_lite_id_dict.__contains__(lite_name):
+            return self.name_rel_id_dict[lite_name]
+
+    def get_rel_id_by_name(self, name):
+        rel_name = self.rel_pre_func(name)
+        if self.name_rel_id_dict.__contains__(rel_name):
+            return self.name_rel_id_dict[rel_name]
+
+    def get_attr_id_by_name(self, name):
+        attr_name = self.rel_pre_func(name)
+        if self.name_attr_id_dict.__contains__(attr_name):
+            return self.name_rel_id_dict[attr_name]
+
+    def get_or_insert_inv_rel_id(self, rel_id):
         if not self.rel_inv_dict.__contains__(rel_id):
             generated_id = self.component_id
             self.component_id += 1
@@ -106,20 +121,20 @@ class KG:
 
     def insert_rel_triple(self, head, relation, tail):
         h, r, t = self.ent_pre_func(head), self.rel_pre_func(relation), self.ent_pre_func(tail)
-        h_id, r_id, t_id = self.get_ent_id(h), self.get_rel_id(r), self.get_ent_id(t)
+        h_id, r_id, t_id = self.get_or_insert_ent_id(h), self.get_or_insert_rel_id(r), self.get_or_insert_ent_id(t)
         self.kg_core.insert_rel_triple(h_id, r_id, t_id)
-        r_inv_id = self.get_inv_rel_id(r_id)
+        r_inv_id = self.get_or_insert_inv_rel_id(r_id)
         self.kg_core.insert_rel_inv_triple(h_id, r_inv_id, t_id)
 
     def insert_attr_triple(self, head, attribute, tail):
         h, a, t = self.ent_pre_func(head), self.attr_pre_func(attribute), self.lite_pre_func(tail)
-        h_id, a_id, t_id = self.get_ent_id(h), self.get_attr_id(a), self.get_lite_id(t)
+        h_id, a_id, t_id = self.get_or_insert_ent_id(h), self.get_or_insert_attr_id(a), self.get_or_insert_lite_id(t)
         self.kg_core.insert_attr_triple(h_id, a_id, t_id)
-        a_inv_id = self.get_inv_rel_id(a_id)
+        a_inv_id = self.get_or_insert_inv_rel_id(a_id)
         self.kg_core.insert_attr_inv_triple(h_id, a_inv_id, t_id)
 
-    def insert_ent_embed(self, ent_name, emb):
-        ent_id = self.get_ent_id_without_insert(ent_name)
+    def insert_ent_embed_by_name(self, ent_name, emb):
+        ent_id = self.get_ent_id_by_name(ent_name)
         if ent_id is not None:
             self.kg_core.set_ent_embed(ent_id, emb)
         else:
@@ -152,14 +167,23 @@ class KG:
     def get_attr_id_set(self):
         return self.kg_core.get_attr_set()
 
-    def get_functionality(self, idx):
+    def get_functionality_by_id(self, idx):
         return self.kg_core.get_functionality(idx)
 
-    def get_inv_functionality(self, idx):
+    def get_inv_functionality_by_id(self, idx):
         return self.kg_core.get_inv_functionality(idx)
 
     def get_ent_name_by_id(self, idx):
         return self.ent_id_name_dict[idx]
+
+    def get_rel_name_by_id(self, idx):
+        if self.rel_id_name_dict.__contains__(idx):
+            return self.rel_id_name_dict[idx]
+        else:
+            inv_idx = self.rel_inv_dict[idx]
+            inv_name = self.rel_id_name_dict[inv_idx]
+            if inv_name is not None:
+                return inv_name + KG.suffix_for_inv_rel
 
     @staticmethod
     def reset_component_id():

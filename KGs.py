@@ -11,15 +11,17 @@ class KGs:
 
         self.pr = pc.PRModule(kg1.kg_core, kg2.kg_core)
 
-    def align_literals(self):
+    def _align_literals(self):
         for (lite_id, lite_name) in self.kg1.lite_id_name_dict.items():
             if self.kg2.name_lite_id_dict.__contains__(lite_name):
                 lite_cp_id = self.kg2.name_lite_id_dict[lite_name]
-                self.pr.insert_lite_eqv(lite_id, lite_cp_id, KGs.default_lite_align_prob, False)
-                self.pr.insert_lite_eqv(lite_cp_id, lite_id, KGs.default_lite_align_prob, False)
+                self.pr.update_lite_eqv(lite_id, lite_cp_id, KGs.default_lite_align_prob, False)
+                self.pr.update_lite_eqv(lite_cp_id, lite_id, KGs.default_lite_align_prob, False)
 
-    def init(self):
+    def init(self, align_lite=True):
         self.pr.init()
+        if align_lite:
+            self._align_literals()
 
     def run_pr(self):
         self.pr.run()
@@ -28,37 +30,40 @@ class KGs:
         return len(self.kg1.get_ent_id_set()) + len(self.kg2.get_ent_id_set())
 
     def get_attribute_nums(self):
-        return len(self.kg1.get_a()) + len(self.kg2.get_ent_id_set())
+        return len(self.kg1.get_attr_id_set()) + len(self.kg2.get_attr_id_set())
 
-    def insert_forced_ent_eqv(self, ent_name, ent_cp_name, prob):
-        ent_id = self.kg1.get_ent_id_without_insert(ent_name)
-        ent_cp_id = self.kg2.get_ent_id_without_insert(ent_cp_name)
+    def insert_forced_ent_eqv_both_way_by_name(self, ent_name, ent_cp_name, prob):
+        ent_id = self.kg1.get_ent_id_by_name(ent_name)
+        ent_cp_id = self.kg2.get_ent_id_by_name(ent_cp_name)
         if ent_id is None or ent_cp_id is None:
             print("fail to get ent ids")
             return
-        self.pr.insert_ent_eqv(ent_id, ent_cp_id, prob, True)
-        self.pr.insert_ent_eqv(ent_cp_id, ent_id, prob, True)
+        self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, True)
+        self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, True)
 
-    def insert_ent_eqv(self, ent_name, ent_cp_name, prob):
-        ent_id = self.kg1.get_ent_id_without_insert(ent_name)
-        ent_cp_id = self.kg2.get_ent_id_without_insert(ent_cp_name)
+    def insert_ent_eqv_both_way_by_name(self, ent_name, ent_cp_name, prob):
+        ent_id = self.kg1.get_ent_id_by_name(ent_name)
+        ent_cp_id = self.kg2.get_ent_id_by_name(ent_cp_name)
         if ent_id is None or ent_cp_id is None:
             print("fail to get ent ids")
             return
-        self.pr.insert_ent_eqv(ent_id, ent_cp_id, prob, False)
-        self.pr.insert_ent_eqv(ent_cp_id, ent_id, prob, False)
+        self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
+        self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
 
-    def insert_ent_eqv_by_id(self, ent_id, ent_cp_id, prob):
+    def insert_ent_eqv_both_way_by_id(self, ent_id, ent_cp_id, prob):
         if ent_id is None or ent_cp_id is None:
             print("fail to get ent ids")
             return
-        self.pr.insert_ent_eqv(ent_id, ent_cp_id, prob, False)
-        self.pr.insert_ent_eqv(ent_cp_id, ent_id, prob, False)
+        self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
+        self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
 
-    def get_kg1_unaligned_candidates(self):
+    def remove_forced_ent_eqv_by_id(self, idx_a, idx_b):
+        return self.pr.remove_forced_eqv(idx_a, idx_b)
+
+    def get_kg1_unaligned_candidate_ids(self):
         return self.pr.get_kg_a_unaligned_ents()
 
-    def get_kg2_unaligned_candidates(self):
+    def get_kg2_unaligned_candidate_ids(self):
         return self.pr.get_kg_b_unaligned_ents()
 
     def clear_kgs_ent_embed(self):
@@ -66,8 +71,35 @@ class KGs:
         self.kg2.clear_ent_embed()
         self.pr.reset_emb_eqv()
 
-    def get_ent_align_result(self):
+    def get_ent_align_ids_result(self):
         return self.pr.get_ent_eqv_result()
+
+    def get_rel_align_ids_result(self):
+        sub_align_result, sup_align_result = set(), set()
+        for (rel_id, rel_cp_id, prob) in self.pr.get_rel_eqv_result():
+            if rel_id in self.kg1.rel_inv_dict:
+                sub_align_result.add((rel_id, rel_cp_id, prob))
+            elif rel_id in self.kg2.rel_inv_dict:
+                sup_align_result.add((rel_cp_id, rel_id, prob))
+        return sub_align_result, sup_align_result
+
+    def get_ent_align_name_result(self):
+        ent_align_eqv_set = set()
+        for (ent_id, ent_cp_id, prob) in self.pr.get_ent_eqv_result():
+            ent_name, ent_cp_name,  = self.kg1.get_ent_name_by_id(ent_id), self.kg2.get_ent_name_by_id(ent_cp_id)
+            ent_align_eqv_set.add((ent_name, ent_cp_name, prob))
+        return ent_align_eqv_set
+
+    def get_rel_align_name_result(self):
+        sub_align_result, sup_align_result = set(), set()
+        for (rel_id, rel_cp_id, prob) in self.pr.get_rel_eqv_result():
+            if rel_id in self.kg1.rel_inv_dict:
+                rel_name, rel_cp_name = self.kg1.get_rel_name_by_id(rel_id), self.kg2.get_rel_name_by_id(rel_cp_id)
+                sub_align_result.add((rel_name, rel_cp_name, prob))
+            elif rel_id in self.kg2.rel_inv_dict:
+                rel_name, rel_cp_name = self.kg2.get_rel_name_by_id(rel_id), self.kg1.get_rel_name_by_id(rel_cp_id)
+                sup_align_result.add((rel_cp_name, rel_name, prob))
+        return sub_align_result, sup_align_result
 
     def print_result(self):
         for item in self.pr.get_ent_eqv_result():
@@ -79,7 +111,7 @@ class KGs:
             for line in f.readlines():
                 params = str.strip(line).split("\t")
                 ent_l, ent_r = params[0].strip(), params[1].strip()
-                obj_l, obj_r = self.kg1.get_ent_id_without_insert(ent_l), self.kg2.get_ent_id_without_insert(ent_r)
+                obj_l, obj_r = self.kg1.get_ent_id_by_name(ent_l), self.kg2.get_ent_id_by_name(ent_r)
                 if obj_l is None:
                     print("Exception: fail to load Entity (" + ent_l + ")")
                 if obj_r is None:

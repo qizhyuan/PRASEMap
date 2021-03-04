@@ -360,19 +360,21 @@ double EmbedEquiv::get_emb_eqv(uint64_t id, uint64_t cp_id) {
 class PARISEquiv {
 public:
     PARISEquiv(KG*, KG*);
-    void insert_lite_equiv(uint64_t, uint64_t, double);
-    void insert_ent_equiv(uint64_t, uint64_t, double);
-    void insert_rel_equiv(uint64_t, uint64_t, double);
+    void update_lite_equiv(uint64_t, uint64_t, double);
+    void update_ent_equiv(uint64_t, uint64_t, double);
+    void update_rel_equiv(uint64_t, uint64_t, double);
+    bool remove_forced_equiv(uint64_t, uint64_t);
     double get_ent_equiv(KG*, uint64_t, KG*, uint64_t);
     double get_rel_equiv(uint64_t, uint64_t);
     std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
     void insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>&);
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
-    void update_rel_eqv(int);
-    void update_ent_eqv(bool);
+    void update_rel_eqv_from_ongoing(int);
+    void update_ent_eqv_from_ongoing(bool);
     void reset_ongoing_mp();
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
+    std::vector<std::tuple<uint64_t, uint64_t, double>> get_rel_eqv_result();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
     std::mutex ent_eqv_lock;
@@ -436,16 +438,27 @@ std::vector<uint64_t>& PARISEquiv::get_kg_b_unaligned_ents() {
     return kg_b_unaligned_ents;
 }
 
-void PARISEquiv::insert_lite_equiv(uint64_t lite_id_a, uint64_t lite_id_b, double prob) {
+void PARISEquiv::update_lite_equiv(uint64_t lite_id_a, uint64_t lite_id_b, double prob) {
     insert_value_to_mp_mp(this -> lite_eqv_mp, lite_id_a, lite_id_b, prob);
 }
 
-void PARISEquiv::insert_ent_equiv(uint64_t ent_id_a, uint64_t ent_id_b, double prob) {
+void PARISEquiv::update_ent_equiv(uint64_t ent_id_a, uint64_t ent_id_b, double prob) {
     insert_value_to_mp_mp(this -> ent_eqv_mp, ent_id_a, ent_id_b, prob);
 }
 
-void PARISEquiv::insert_rel_equiv(uint64_t rel_id_a, uint64_t rel_id_b, double prob) {
+void PARISEquiv::update_rel_equiv(uint64_t rel_id_a, uint64_t rel_id_b, double prob) {
     insert_value_to_mp_mp(this -> rel_eqv_mp, rel_id_a, rel_id_b, prob);
+}
+
+bool PARISEquiv::remove_forced_equiv(uint64_t id_a, uint64_t id_b) {
+    bool success = false;
+    if (forced_eqv_mp.count(id_a)) {
+        success = forced_eqv_mp[id_a].erase(id_b);
+        if (forced_eqv_mp[id_a].empty()) {
+            forced_eqv_mp.erase(id_a);
+        }
+    }
+    return success;
 }
 
 double PARISEquiv::get_ent_equiv(KG* kg_a, uint64_t ent_id_a, KG* kg_b, uint64_t ent_id_b) {
@@ -522,7 +535,7 @@ void PARISEquiv::insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unorde
     }
 }
 
-void PARISEquiv::update_rel_eqv(int norm_const) {
+void PARISEquiv::update_rel_eqv_from_ongoing(int norm_const) {
     rel_eqv_mp.clear();
     
     std::function<double(uint64_t)> get_rel_norm = [&](uint64_t rel_id) {
@@ -555,7 +568,7 @@ void PARISEquiv::update_rel_eqv(int norm_const) {
     }
 }
 
-void PARISEquiv::update_ent_eqv(bool update_unaligned_ents) {
+void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
     std::vector<std::tuple<uint64_t, uint64_t, double>> new_ent_eqv_tuples;
     std::unordered_set<uint64_t> visited;
 
@@ -600,8 +613,8 @@ void PARISEquiv::update_ent_eqv(bool update_unaligned_ents) {
         uint64_t cp_id = std::get<1>(eqv_tuple);
         if (!visited.count(id) && !visited.count(cp_id)) {
             double prob = std::get<2>(eqv_tuple);
-            insert_ent_equiv(id, cp_id, prob);
-            insert_ent_equiv(cp_id, id, prob);
+            update_ent_equiv(id, cp_id, prob);
+            update_ent_equiv(cp_id, id, prob);
             ent_eqv_tuples.push_back(eqv_tuple);
             visited.insert(id);
             visited.insert(cp_id);
@@ -635,6 +648,21 @@ void PARISEquiv::reset_ongoing_mp() {
 
 std::vector<std::tuple<uint64_t, uint64_t, double>>& PARISEquiv::get_ent_eqv_result() {
     return ent_eqv_tuples;
+}
+
+std::vector<std::tuple<uint64_t, uint64_t, double>> PARISEquiv::get_rel_eqv_result() {
+    std::vector<std::tuple<uint64_t, uint64_t, double>> rel_eqv_tuples;
+    
+    for (auto iter = rel_eqv_mp.begin(); iter != rel_eqv_mp.end(); ++iter) {
+        uint64_t rel_id = iter -> first;
+        std::unordered_map<uint64_t, double>& mapper = iter  -> second;
+        for (auto sub_iter = mapper.begin(); sub_iter != mapper.end(); ++sub_iter) {
+            uint64_t rel_cp_id = sub_iter -> first;
+            double prob = sub_iter -> second;
+            rel_eqv_tuples.emplace_back(std::make_tuple(rel_id, rel_cp_id, prob));
+        }
+    }
+    return rel_eqv_tuples;
 }
 
 double PARISEquiv::get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b) {
@@ -713,9 +741,9 @@ PARISParams::PARISParams() {
 class PRModule {
 public:
     PRModule(KG &, KG &);
-    void insert_ent_eqv(uint64_t, uint64_t, double, bool);
-    void insert_lite_eqv(uint64_t, uint64_t, double, bool);
-    void insert_rel_eqv(uint64_t, uint64_t, double, bool);
+    void update_ent_eqv(uint64_t, uint64_t, double, bool);
+    void update_lite_eqv(uint64_t, uint64_t, double, bool);
+    void update_rel_eqv(uint64_t, uint64_t, double, bool);
     void enable_rel_init(bool);
     void enable_emb_eqv(bool);
     void set_worker_num(int);
@@ -726,7 +754,9 @@ public:
     void init();
     void reset_emb_eqv();
     void run();
+    bool remove_forced_eqv(uint64_t, uint64_t);
     std::vector<std::tuple<uint64_t, uint64_t, double>> & get_ent_eqv_result();
+    std::vector<std::tuple<uint64_t, uint64_t, double>> get_rel_eqv_result();
     std::vector<uint64_t>& get_kg_a_unaligned_ents();
     std::vector<uint64_t>& get_kg_b_unaligned_ents();
 private:
@@ -807,25 +837,29 @@ void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered
     mp[id_a][id_b] = prob;
 }
 
-void PRModule::insert_ent_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> insert_ent_equiv(id_a, id_b, prob);
+void PRModule::update_ent_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
+    paris_eqv -> update_ent_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
 }
 
-void PRModule::insert_lite_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> insert_lite_equiv(id_a, id_b, prob);
+void PRModule::update_lite_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
+    paris_eqv -> update_lite_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
 }
 
-void PRModule::insert_rel_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> insert_rel_equiv(id_a, id_b, prob);
+void PRModule::update_rel_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
+    paris_eqv -> update_rel_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
     }
+}
+
+bool PRModule::remove_forced_eqv(uint64_t id_a, uint64_t id_b) {
+    return paris_eqv -> remove_forced_equiv(id_a, id_b);
 }
 
 void PRModule::enable_rel_init(bool flag) {
@@ -834,6 +868,10 @@ void PRModule::enable_rel_init(bool flag) {
 
 std::vector<std::tuple<uint64_t, uint64_t, double>> & PRModule::get_ent_eqv_result() {
     return paris_eqv -> get_ent_eqv_result();
+}
+
+std::vector<std::tuple<uint64_t, uint64_t, double>> PRModule::get_rel_eqv_result() {
+    return paris_eqv -> get_rel_eqv_result();
 }
 
 void PRModule::run() {
@@ -1133,7 +1171,7 @@ void PRModule::one_iteration() {
 
     std::cout<<"update_ent_eqv"<<std::endl;
     bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
-    paris_eqv -> update_ent_eqv(update_unaligned_ents);
+    paris_eqv -> update_ent_eqv_from_ongoing(update_unaligned_ents);
 
     std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
     std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
@@ -1145,7 +1183,7 @@ void PRModule::one_iteration() {
     one_iteration_one_way(ent_queue, kg_b, kg_a, false);
 
     std::cout<<"update_rel_eqv"<<std::endl;
-    paris_eqv -> update_rel_eqv(paris_params -> SMOOTH_NORM);
+    paris_eqv -> update_rel_eqv_from_ongoing(paris_params -> SMOOTH_NORM);
 
 }
 
@@ -1181,8 +1219,10 @@ PYBIND11_MODULE(prase_core, m)
 
     py::class_<PRModule>(m, "PRModule").def(py::init<KG&, KG&>())
     .def("init", &PRModule::init)
-    .def("insert_ent_eqv", &PRModule::insert_ent_eqv)
-    .def("insert_lite_eqv", &PRModule::insert_lite_eqv)
+    .def("update_ent_eqv", &PRModule::update_ent_eqv)
+    .def("update_lite_eqv", &PRModule::update_lite_eqv)
+    .def("update_rel_eqv", &PRModule::update_rel_eqv)
+    .def("remove_forced_equiv", &PRModule::remove_forced_eqv)
     .def("set_worker_num", &PRModule::set_worker_num)
     .def("set_emb_cache_capacity", &PRModule::set_emb_cache_capacity)
     .def("set_se_trade_off", &PRModule::set_se_trade_off)
@@ -1195,5 +1235,6 @@ PYBIND11_MODULE(prase_core, m)
     .def("get_kg_b_unaligned_ents", &PRModule::get_kg_b_unaligned_ents)
     .def("run", &PRModule::run)
     .def("get_ent_eqv_result", &PRModule::get_ent_eqv_result)
+    .def("get_rel_eqv_result", &PRModule::get_rel_eqv_result)
     ;
 }

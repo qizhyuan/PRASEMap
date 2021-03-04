@@ -28,8 +28,9 @@ def construct_kg(path_r, path_a=None, sep='\t'):
 
     return kg
 
-def construct_kgs(kg1, kg2):
-    kgs = KGs.KGs(kg1, kg2)
+
+def construct_kgs(kg1, kg2, se_module=None, **kwargs):
+    kgs = KGs.KGs(kg1, kg2, se_module, **kwargs)
     return kgs
 
 # def save_prase_model(kgs, target_dir, file_name):

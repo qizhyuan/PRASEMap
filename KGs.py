@@ -5,11 +5,15 @@ import prase_core as pc
 class KGs:
     default_lite_align_prob = 0.99
 
-    def __init__(self, kg1: KG, kg2: KG):
+    def __init__(self, kg1: KG, kg2: KG, se_module=None, **kwargs):
         self.kg1 = kg1
         self.kg2 = kg2
 
         self.pr = pc.PRModule(kg1.kg_core, kg2.kg_core)
+        self.se = None
+
+        if se_module is not None:
+            self.se = se_module(self, **kwargs)
 
     def _align_literals(self):
         for (lite_id, lite_name) in self.kg1.lite_id_name_dict.items():
@@ -25,6 +29,12 @@ class KGs:
 
     def run_pr(self):
         self.pr.run()
+
+    def run_se(self, mapping_feedback=True, embedding_feedback=True, **kwargs):
+        if self.se is not None:
+            self.se.init()
+            self.se.train()
+            self.se.feed_back_to_pr_module(mapping_feedback, embedding_feedback, **kwargs)
 
     def get_entity_nums(self):
         return len(self.kg1.get_ent_id_set()) + len(self.kg2.get_ent_id_set())

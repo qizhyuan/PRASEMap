@@ -10,6 +10,10 @@ tf.disable_v2_behavior()
 
 _LAYER_UIDS = {}
 
+'''
+This implementation is based on https://github.com/1049451037/GCN-Align
+'''
+
 
 def construct_feed_dict(features, support, placeholders):
     feed_dict = dict()
@@ -246,14 +250,14 @@ class Model(object):
     def save(self, sess=None):
         if not sess:
             raise AttributeError("TensorFlow session not provided.")
-        saver = tf.train.Saver(self.vars)
+        saver = tf.train_array.Saver(self.vars)
         save_path = saver.save(sess, "tmp/%s.ckpt" % self.name)
         print("Model saved in file: %s" % save_path)
 
     def load(self, sess=None):
         if not sess:
             raise AttributeError("TensorFlow session not provided.")
-        saver = tf.train.Saver(self.vars)
+        saver = tf.train_array.Saver(self.vars)
         save_path = "tmp/%s.ckpt" % self.name
         saver.restore(sess, save_path)
         print("Model restored from file: %s" % save_path)
@@ -367,17 +371,16 @@ class GraphConvolution(Layer):
 
 class GCNAlign:
 
-    def __init__(self, kgs: KGs, embed_dim=64, layers_dims=None, activations=None, dropout=0., lr=8, neg_num=5,
-                 epoch_num=100, margin=3):
-        self.layers_dims = layers_dims
-        self.activations = activations
-        self.embed_dim = embed_dim
-        self.dropout = dropout
+    def __init__(self, kgs: KGs, **kwargs):
+
         self.kgs = kgs
-        self.lr = lr
-        self.margin = margin
-        self.neg_num = neg_num
-        self.epoch_num = epoch_num
+        self.embed_dim = kwargs.get("embed_dim", 64)
+        self.dropout = kwargs.get("dropout", 0.)
+        self.lr = kwargs.get("lr", 8)
+        self.margin = kwargs.get("margin", 3)
+        self.neg_num = kwargs.get("neg_num", 5)
+        self.epoch_num = kwargs.get("epoch_num", 100)
+
         self.support_number = 1
 
         self.ae_input = None
@@ -461,7 +464,7 @@ class GCNAlign:
                 cnt[r] += 1
 
         fre = [(k, cnt[k]) for k in sorted(cnt, key=cnt.get, reverse=True)]
-        print(fre)
+        # print(fre)
         attr2id = {}
         num = int(0.7 * len(cnt))
         for i in range(num):
@@ -524,7 +527,7 @@ class GCNAlign:
         for item in self.kgs.get_kg2_unaligned_candidate_ids():
             self.kg2_test_ent_list.append(self.embed_idx_dict[item])
 
-        self.train = np.array(self.ent_training_links)
+        self.train_array = np.array(self.ent_training_links)
 
     def _init_model(self):
         self.ph_ae = {
@@ -540,10 +543,10 @@ class GCNAlign:
             "num_features_nonzero": tf.placeholder_with_default(0, shape=())
         }
         self.model_ae = GCNAlignUnit(self.ph_ae, input_dim=self.ae_input_dim, output_dim=self.embed_dim,
-                                     ILL=self.train, sparse_inputs=True, featureless=False, neg_num=self.neg_num,
+                                     ILL=self.train_array, sparse_inputs=True, featureless=False, neg_num=self.neg_num,
                                      lr=self.lr, gamma=self.margin)
         self.model_se = GCNAlignUnit(self.ph_se, input_dim=self.se_input_dim, output_dim=self.embed_dim,
-                                     ILL=self.train,
+                                     ILL=self.train_array,
                                      sparse_inputs=False, featureless=True, neg_num=self.neg_num, lr=self.lr,
                                      gamma=self.margin)
 
@@ -556,7 +559,7 @@ class GCNAlign:
         self._load_data()
         self._init_model()
 
-    def train_embeddings(self):
+    def train(self):
         neg_num = self.neg_num
         train_num = len(self.ent_training_links)
         train_links = np.array(self.ent_training_links)

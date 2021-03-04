@@ -42,3 +42,4 @@ setup.py
 /.idea
 /__pycache__
 se/GCNAlign/__pycache__/
+utils/__pycache__/

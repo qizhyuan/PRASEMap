@@ -150,6 +150,13 @@ class KG:
         else:
             print("error")
 
+    def get_ent_embed_by_id(self, ent_id):
+        ent_emb = None
+        if ent_id is not None:
+            ent_emb = self.kg_core.get_ent_embed(ent_id)
+        if not len(ent_emb) <= 1:
+            return ent_emb
+
     def get_relation_id_triples(self) -> set:
         return self.kg_core.get_relation_triples()
 
@@ -209,6 +216,10 @@ class KG:
 
     def get_inv_id(self, idx):
         return self.rel_inv_dict[idx]
+
+    def get_attr_one_way_frequency_list(self):
+        frequency_dict = self.kg_core.get_attr_frequency_mp()
+        return sorted(frequency_dict.items(), key=lambda x: x[1], reverse=True)
 
     @staticmethod
     def reset_component_id():

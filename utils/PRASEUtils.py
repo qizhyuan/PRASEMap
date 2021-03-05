@@ -2,6 +2,7 @@ import os
 import json
 import KG
 import KGs
+import numpy as np
 
 
 def construct_kg(path_r, path_a=None, sep='\t'):
@@ -37,7 +38,7 @@ def construct_kgs(kg1, kg2, se_module=None, **kwargs):
     return kgs
 
 
-def save_prase_model(kgs, target_path):
+def save_prase_model(kgs, target_path, save_emb=False):
     base, file_name = os.path.split(target_path)
     if not os.path.exists(base):
         os.makedirs(base)
@@ -55,6 +56,8 @@ def save_prase_model(kgs, target_path):
     save_dict["forced_mappings"]["sup_rel_mappings"] = set()
     save_dict["forced_mappings"]["sub_attr_mappings"] = set()
     save_dict["forced_mappings"]["sup_attr_mappings"] = set()
+    save_dict["data"]["embedding"] = dict()
+    save_dict["data"]["ent_embeddings"] = dict()
 
     for (ent_name, ent_cp_name, prob) in kgs.get_ent_align_name_result():
         save_dict["data"]["ent_mappings"].add((ent_name, ent_cp_name, prob))
@@ -147,6 +150,23 @@ def save_prase_model(kgs, target_path):
                 dictionary[key] = new_list
 
     transform_set_to_list(save_dict)
+
+    save_dict["data"]["ent_embeddings"]["KG1"] = dict()
+    save_dict["data"]["ent_embeddings"]["KG2"] = dict()
+
+    if save_emb:
+        for ent_id in kgs.kg1.get_ent_id_set():
+            ent_name = kgs.kg1.get_ent_name_by_id(ent_id)
+            ent_emb = kgs.kg1.get_ent_embed_by_id(ent_id)
+            if ent_emb is not None:
+                save_dict["data"]["ent_embeddings"]["KG1"][ent_name] = ent_emb.tolist()
+
+        for ent_id in kgs.kg2.get_ent_id_set():
+            ent_name = kgs.kg2.get_ent_name_by_id(ent_id)
+            ent_emb = kgs.kg2.get_ent_embed_by_id(ent_id)
+            if ent_emb is not None:
+                save_dict["data"]["ent_embeddings"]["KG2"][ent_name] = ent_emb.tolist()
+
     with open(file_name, "w", encoding="utf8") as f:
         json.dump(save_dict, f, indent=4)
 
@@ -237,6 +257,19 @@ def load_prase_model(kgs, source_path):
         attr_l_id = kgs.kg1.get_inv_id(attr_l_id) if inv_l else attr_l_id
         attr_r_id = kgs.kg2.get_inv_id(attr_r_id) if inv_r else attr_r_id
         kgs.insert_forced_rel_eqv_by_id(attr_r_id, attr_l_id, prob)
+
+    kg1_ent_emb = load_dict["data"]["ent_embeddings"]["KG1"]
+    kg2_ent_emb = load_dict["data"]["ent_embeddings"]["KG2"]
+
+    for (ent_name, emb_list) in kg1_ent_emb.items():
+        ent_id = kgs.kg1.get_ent_id_by_name(ent_name, False)
+        embed = np.array(emb_list)
+        kgs.kg1.insert_ent_embed_by_id(ent_id, embed)
+
+    for (ent_name, emb_list) in kg2_ent_emb.items():
+        ent_id = kgs.kg2.get_ent_id_by_name(ent_name, False)
+        embed = np.array(emb_list)
+        kgs.kg2.insert_ent_embed_by_id(ent_id, embed)
 
     kgs.pr.init_loaded_data()
 

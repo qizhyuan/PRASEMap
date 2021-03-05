@@ -47,6 +47,54 @@ struct pair_hash {
     }
 };
 
+struct PARISParams {
+    bool ENABLE_EMB_EQV;
+    double ENT_EQV_THRESHOLD;
+    double REL_EQV_THRESHOLD;
+    double REL_EQV_FACTOR_THRESHOLD;
+    double REL_INIT_EQV;
+    double INIT_REL_EQV_PROB;
+    double HIGH_CONF_THRESHOLD;
+    double OUTPUT_THRESHOLD;
+    double PENALTY_VALUE;
+    double ENT_REGISTER_THRESHOLD;
+    double EMB_EQV_TRADE_OFF;
+    double INV_FUNCTIONALITY_THRESHOLD;
+    int INIT_ITERATION;
+    int ENT_CANDIDATE_NUM;
+    int SMOOTH_NORM;
+    int THREAD_NUM;
+    int MAX_THREAD_NUM;
+    int MIN_THREAD_NUM;
+    int MAX_ITERATION_NUM;
+    uint64_t MAX_EMB_EQV_CACHE_NUM;
+    PARISParams();
+};
+
+PARISParams::PARISParams() {
+    ENABLE_EMB_EQV = true;
+    ENT_EQV_THRESHOLD = 0.1;
+    REL_EQV_THRESHOLD = 0.1;
+    REL_EQV_FACTOR_THRESHOLD = 0.01;
+    REL_INIT_EQV = 0.1;
+    INIT_REL_EQV_PROB = 0.1;
+    HIGH_CONF_THRESHOLD = 0.9;
+    OUTPUT_THRESHOLD = 0.1;
+    PENALTY_VALUE = 1.01;
+    ENT_REGISTER_THRESHOLD = 0.01;
+    INIT_ITERATION = 2;
+    ENT_CANDIDATE_NUM = 1;
+    SMOOTH_NORM = 10;
+    THREAD_NUM = std::thread::hardware_concurrency();
+    MAX_THREAD_NUM = INT_MAX;
+    MIN_THREAD_NUM = 1;
+    MAX_ITERATION_NUM = 10;
+    MAX_EMB_EQV_CACHE_NUM = 1000000;
+    EMB_EQV_TRADE_OFF = 0.2;
+    INV_FUNCTIONALITY_THRESHOLD = 0.05;
+}
+
+
 class KG {
 public:
     static bool is_emb_empty(Eigen::VectorXd&);
@@ -65,6 +113,7 @@ public:
     std::set<uint64_t>& get_lite_set();
     std::set<uint64_t>& get_rel_set();
     std::set<uint64_t>& get_attr_set();
+    std::map<uint64_t, uint64_t>& get_attr_frequency_mp();
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& get_relation_triples();
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>>& get_attribute_triples();
     double get_functionality(uint64_t);
@@ -72,7 +121,7 @@ public:
     void init_functionalities();
     void set_ent_embed(uint64_t, Eigen::VectorXd &);
     void clear_ent_embeds();
-    Eigen::VectorXd& get_ent_embs(uint64_t);
+    Eigen::VectorXd& get_ent_embed(uint64_t);
 private:
     std::set<uint64_t> ent_set;
     std::set<uint64_t> lite_set;
@@ -84,6 +133,7 @@ private:
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_ent_mp;
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>> relation_triples;
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>> attribute_triples;
+    std::map<uint64_t, uint64_t> attr_frequent_mp;
     std::unordered_map<uint64_t, double> functionality_mp;
     std::unordered_map<uint64_t, double> inv_functionality_mp;
     static std::set<std::pair<uint64_t, uint64_t>> EMPTY_PAIR_SET;
@@ -123,6 +173,15 @@ void KG::insert_attr_triple(uint64_t entity, uint64_t attribute, uint64_t litera
     insert_triple(this -> h_r_t_mp, entity, attribute, literal);
     insert_triple(this -> t_r_h_mp, literal, attribute, entity);
     insert_triple(this -> t_r_h_ent_mp, literal, attribute, entity);
+    
+    if (!attr_frequent_mp.count(attribute)) {
+        attr_frequent_mp[attribute] = 0;
+    }
+    attr_frequent_mp[attribute] += 1;
+}
+
+std::map<uint64_t, uint64_t>& KG::get_attr_frequency_mp() {
+    return attr_frequent_mp;
 }
 
 void KG::insert_attr_inv_triple(uint64_t entity, uint64_t attribute_inv, uint64_t literal) {
@@ -274,10 +333,9 @@ void KG::clear_ent_embeds() {
 
 void KG::set_ent_embed(uint64_t ent_id, Eigen::VectorXd &embeds) {
     ent_emb_mp[ent_id] = embeds;
-    // std::cout<<embeds<<std::endl;
 }
 
-Eigen::VectorXd& KG::get_ent_embs(uint64_t ent_id) {
+Eigen::VectorXd& KG::get_ent_embed(uint64_t ent_id) {
     if (ent_emb_mp.count(ent_id)) {
         return ent_emb_mp[ent_id];
     }
@@ -320,8 +378,8 @@ bool EmbedEquiv::has_emb_eqv() {
 }
 
 double EmbedEquiv::calculate_emb_eqv(uint64_t id, uint64_t cp_id) {
-    Eigen::VectorXd& emb_a = kg_a -> get_ent_embs(id);
-    Eigen::VectorXd& emb_b = kg_b -> get_ent_embs(cp_id);
+    Eigen::VectorXd& emb_a = kg_a -> get_ent_embed(id);
+    Eigen::VectorXd& emb_b = kg_b -> get_ent_embed(cp_id);
 
     if (KG::is_emb_empty(emb_a) || KG::is_emb_empty(emb_b)) {
         return 0.0;
@@ -359,7 +417,7 @@ double EmbedEquiv::get_emb_eqv(uint64_t id, uint64_t cp_id) {
 
 class PARISEquiv {
 public:
-    PARISEquiv(KG*, KG*);
+    PARISEquiv(KG*, KG*, PARISParams*);
     void update_lite_equiv(uint64_t, uint64_t, double);
     void update_ent_equiv(uint64_t, uint64_t, double);
     void update_rel_equiv(uint64_t, uint64_t, double);
@@ -386,6 +444,7 @@ public:
     std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
 private:
     KG *kg_a, *kg_b;
+    PARISParams *paris_params;
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
     static double get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t);
@@ -404,9 +463,10 @@ private:
     std::vector<uint64_t> kg_b_unaligned_ents;
 };
 
-PARISEquiv::PARISEquiv(KG* kg_a, KG* kg_b) {
+PARISEquiv::PARISEquiv(KG* kg_a, KG* kg_b, PARISParams* paris_params) {
     this -> kg_a = kg_a;
     this -> kg_b = kg_b;
+    this -> paris_params = paris_params;
 
     uint64_t min_lite_num = std::min(kg_a -> get_lite_set().size(), kg_b -> get_lite_set().size());
     uint64_t reserve_space = (uint64_t) (0.2 * (double) min_lite_num);
@@ -563,6 +623,11 @@ void PARISEquiv::update_rel_eqv_from_ongoing(int norm_const) {
             if (prob > 1.0) {
                 prob = 1.0;
             }
+
+            if (prob < paris_params -> REL_EQV_THRESHOLD) {
+                continue;
+            }
+
             if (!rel_eqv_mp.count(relation)) {
                 rel_eqv_mp[relation] = std::unordered_map<uint64_t, double>();
             }
@@ -717,54 +782,6 @@ double PARISEquiv::get_literal_equiv(uint64_t literal_id_a, uint64_t literal_id_
     return get_value_from_mp_mp(this -> lite_eqv_mp, literal_id_a, literal_id_b);
 }
 
-struct PARISParams {
-    bool ENABLE_EMB_EQV;
-    double ENT_EQV_THRESHOLD;
-    double REL_EQV_THRESHOLD;
-    double REL_EQV_FACTOR_THRESHOLD;
-    double REL_INIT_EQV;
-    double INIT_REL_EQV_PROB;
-    double HIGH_CONF_THRESHOLD;
-    double OUTPUT_THRESHOLD;
-    double PENALTY_VALUE;
-    double ENT_REGISTER_THRESHOLD;
-    double EMB_EQV_TRADE_OFF;
-    double INV_FUNCTIONALITY_THRESHOLD;
-    int INIT_ITERATION;
-    int ENT_CANDIDATE_NUM;
-    int SMOOTH_NORM;
-    int THREAD_NUM;
-    int MAX_THREAD_NUM;
-    int MIN_THREAD_NUM;
-    int MAX_ITERATION_NUM;
-    uint64_t MAX_EMB_EQV_CACHE_NUM;
-    PARISParams();
-};
-
-PARISParams::PARISParams() {
-    ENABLE_EMB_EQV = true;
-    ENT_EQV_THRESHOLD = 0.1;
-    REL_EQV_THRESHOLD = 0.1;
-    REL_EQV_FACTOR_THRESHOLD = 0.01;
-    REL_INIT_EQV = 0.1;
-    INIT_REL_EQV_PROB = 0.1;
-    HIGH_CONF_THRESHOLD = 0.9;
-    OUTPUT_THRESHOLD = 0.1;
-    PENALTY_VALUE = 1.01;
-    ENT_REGISTER_THRESHOLD = 0.01;
-    INIT_ITERATION = 2;
-    ENT_CANDIDATE_NUM = 1;
-    SMOOTH_NORM = 10;
-    THREAD_NUM = std::thread::hardware_concurrency();
-    MAX_THREAD_NUM = INT_MAX;
-    MIN_THREAD_NUM = 1;
-    MAX_ITERATION_NUM = 10;
-    MAX_EMB_EQV_CACHE_NUM = 1000000;
-    EMB_EQV_TRADE_OFF = 0.2;
-    INV_FUNCTIONALITY_THRESHOLD = 0.05;
-}
-
-
 class PRModule {
 public:
     PRModule(KG &, KG &);
@@ -808,8 +825,8 @@ private:
 PRModule::PRModule(KG &kg_a, KG &kg_b) {
     this -> kg_a = &kg_a;
     this -> kg_b = &kg_b;
-    paris_eqv = new PARISEquiv(this -> kg_a, this -> kg_b);
     paris_params = new PARISParams();
+    paris_eqv = new PARISEquiv(this -> kg_a, this -> kg_b, paris_params);
     emb_eqv = new EmbedEquiv(this -> kg_a, this -> kg_b, paris_params -> ENT_CANDIDATE_NUM);
     iteration = 0;
     enable_relation_init = true;
@@ -1251,11 +1268,13 @@ PYBIND11_MODULE(prase_core, m)
     .def("get_inv_functionality", &KG::get_inv_functionality)
     .def("get_relation_triples", &KG::get_relation_triples)
     .def("get_attribute_triples", &KG::get_attribute_triples)
+    .def("get_attr_frequency_mp", &KG::get_attr_frequency_mp)
     .def("get_ent_set", &KG::get_ent_set)
     .def("get_rel_set", &KG::get_rel_set)
     .def("get_lite_set", &KG::get_lite_set)
     .def("get_attr_set", &KG::get_attr_set)
     .def("set_ent_embed", &KG::set_ent_embed)
+    .def("get_ent_embed", &KG::get_ent_embed)
     .def("clear_ent_embeds", &KG::clear_ent_embeds)
     .def("test", &KG::test)
     ;

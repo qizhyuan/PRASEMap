@@ -446,27 +446,14 @@ class GCNAlign:
                     embed_idx += 1
 
     def _load_attr(self):
-        cnt = {}
-        for (h, r, t) in self.kgs.kg1.get_attribute_id_triples():
-            if h not in self.kgs.kg1.get_ent_id_set():
-                continue
-            if r not in cnt:
-                cnt[r] = 1
-            else:
-                cnt[r] += 1
+        fre_list1 = self.kgs.kg1.get_attr_one_way_frequency_list()
+        fre_list2 = self.kgs.kg2.get_attr_one_way_frequency_list()
+        fre_list1 = fre_list1[:1000] if len(fre_list1) >= 1000 else fre_list1
+        fre_list2 = fre_list2[:1000] if len(fre_list2) >= 1000 else fre_list2
+        fre = fre_list1 + fre_list2
 
-        for (h, r, t) in self.kgs.kg2.get_attribute_id_triples():
-            if h not in self.kgs.kg2.get_ent_id_set():
-                continue
-            if r not in cnt:
-                cnt[r] = 1
-            else:
-                cnt[r] += 1
-
-        fre = [(k, cnt[k]) for k in sorted(cnt, key=cnt.get, reverse=True)]
-        # print(fre)
         attr2id = {}
-        num = int(0.7 * len(cnt))
+        num = int(len(fre))
         for i in range(num):
             attr2id[fre[i][0]] = i
 
@@ -608,6 +595,8 @@ class GCNAlign:
 
     def mapping_feed_back_to_pr(self, beta=0.9, prob=0.95):
         embeddings = np.concatenate([self.vec_se * beta, self.vec_ae * (1.0 - beta)], axis=1)
+        if len(self.kg1_test_ent_list) == 0 or len(self.kg2_test_ent_list) == 0:
+            return
         embeds1 = np.array([embeddings[e] for e in self.kg1_test_ent_list])
         embeds2 = np.array([embeddings[e] for e in self.kg2_test_ent_list])
         distance = cdist(embeds1, embeds2, "cityblock")

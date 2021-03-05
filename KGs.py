@@ -114,11 +114,26 @@ class KGs:
     def get_rel_align_name_result(self):
         sub_align_result, sup_align_result = set(), set()
         for (rel_id, rel_cp_id, prob) in self.pr.get_rel_eqv_result():
+            if rel_id not in self.kg1.get_rel_id_set() and rel_id not in self.kg2.get_rel_id_set():
+                continue
             if rel_id in self.kg1.rel_inv_dict:
                 rel_name, rel_cp_name = self.kg1.get_rel_name_by_id(rel_id), self.kg2.get_rel_name_by_id(rel_cp_id)
                 sub_align_result.add((rel_name, rel_cp_name, prob))
             elif rel_id in self.kg2.rel_inv_dict:
                 rel_name, rel_cp_name = self.kg2.get_rel_name_by_id(rel_id), self.kg1.get_rel_name_by_id(rel_cp_id)
+                sup_align_result.add((rel_cp_name, rel_name, prob))
+        return sub_align_result, sup_align_result
+
+    def get_attr_align_name_result(self):
+        sub_align_result, sup_align_result = set(), set()
+        for (attr_id, attr_cp_id, prob) in self.pr.get_rel_eqv_result():
+            if attr_id not in self.kg1.get_attr_id_set() and attr_id not in self.kg2.get_attr_id_set():
+                continue
+            if attr_id in self.kg1.rel_inv_dict:
+                rel_name, rel_cp_name = self.kg1.get_attr_name_by_id(attr_id), self.kg2.get_attr_name_by_id(attr_cp_id)
+                sub_align_result.add((rel_name, rel_cp_name, prob))
+            elif attr_id in self.kg2.rel_inv_dict:
+                rel_name, rel_cp_name = self.kg2.get_attr_name_by_id(attr_id), self.kg1.get_attr_name_by_id(attr_cp_id)
                 sup_align_result.add((rel_cp_name, rel_name, prob))
         return sub_align_result, sup_align_result
 

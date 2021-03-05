@@ -374,7 +374,7 @@ class GCNAlign:
     def __init__(self, kgs: KGs, **kwargs):
 
         self.kgs = kgs
-        self.embed_dim = kwargs.get("embed_dim", 64)
+        self.embed_dim = kwargs.get("embed_dim", 32)
         self.dropout = kwargs.get("dropout", 0.)
         self.lr = kwargs.get("lr", 8)
         self.margin = kwargs.get("margin", 3)
@@ -549,6 +549,9 @@ class GCNAlign:
     def train(self):
         neg_num = self.neg_num
         train_num = len(self.ent_training_links)
+        if train_num <= 0:
+            return
+
         train_links = np.array(self.ent_training_links)
         pos = np.ones((train_num, neg_num)) * (train_links[:, 0].reshape((train_num, 1)))
         neg_left = pos.reshape((train_num * neg_num,))
@@ -581,11 +584,6 @@ class GCNAlign:
             batch_loss = batch_loss1 + batch_loss2
             print('epoch {}, average triple loss: {:.4f}, cost time: {:.4f}s'.format(i, batch_loss,
                                                                                      time.time() - start))
-            # if i % 10 == 0:
-            #     self.feed_dict_ae = feed_dict_ae
-            #     self.feed_dict_se = feed_dict_se
-            #     self.test()
-            #     self.valid(path=r"D:\repos\self\PARIS-PYTHON\dataset\industry\ent_links")
 
         vec_se = self.session.run(self.model_se.outputs, feed_dict=feed_dict_se)
         vec_ae = self.session.run(self.model_ae.outputs, feed_dict=feed_dict_ae)

@@ -1,7 +1,7 @@
 import argparse
 
 import utils.PRASEUtils as pu
-from se.GCNAlign.Model import GCNAlign
+import se
 
 parser = argparse.ArgumentParser(description="Probabilistic Reasoning and Semantic Embedding")
 
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     kg1 = pu.construct_kg(kg1_rel_path, kg1_attr_path)
     kg2 = pu.construct_kg(kg2_rel_path, kg2_attr_path)
 
-    kgs = pu.construct_kgs(kg1, kg2, GCNAlign)
+    kgs = pu.construct_kgs(kg1, kg2, se.GCNAlign)
     kgs.init()
 
     # kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\industry\ent_links")

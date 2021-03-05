@@ -1,4 +1,4 @@
-import KG
+from prase import KG
 import prase_core as pc
 
 

@@ -1,12 +1,23 @@
-from setuptools import setup, Extension
+import os
+from setuptools import setup, Extension, find_packages
 
-functions_module = Extension(
-    name='prase_core',
-    sources=['prase_core.cpp'],
-    include_dirs=[r'D:\repos\study\repos\pybind11\include',
-                  r"D:\repos\study\repos\eigen-3.3.9",
-                  r'C:\Program Files\Python\Python37\include']
-    # include_dirs 中的路径 更改为自己虚拟环境下相应 pybind11的路径 和 python的include路径
-)
 
-setup(ext_modules=[functions_module])
+def get_extension():
+    file_path = os.path.abspath(__file__)
+    base, _ = os.path.split(file_path)
+    print(base)
+    print("haha")
+    pybind_path = os.path.join(base, "dependence/pybind11-2.6/include")
+    eigen_path = os.path.join(base, "dependence/eigen-3.3.9")
+    core_path = os.path.join(base, "pr/prase_core.cpp")
+    print(core_path)
+    prase_core_module = Extension(name='prase_core', sources=[core_path], include_dirs=[pybind_path, eigen_path])
+    return [prase_core_module]
+
+
+setup(name="prase",
+      version="0.1",
+      packages=["prase", "se"],
+      author="qizhyuan",
+      author_email="qizhyuan@gmail.com",
+      ext_modules=get_extension())

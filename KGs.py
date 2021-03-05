@@ -60,12 +60,23 @@ class KGs:
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
 
+    def insert_lite_eqv_by_id(self, lite_id, lite_cp_id, prob=None, forced=True):
+        if prob is None:
+            prob = KGs.default_lite_align_prob
+        self.pr.update_lite_eqv(lite_id, lite_cp_id, prob, forced)
+
     def insert_ent_eqv_both_way_by_id(self, ent_id, ent_cp_id, prob):
         if ent_id is None or ent_cp_id is None:
             print("fail to get ent ids")
             return
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
+
+    def insert_rel_eqv_by_id(self, rel_id, rel_cp_id, prob):
+        self.pr.update_rel_eqv(rel_id, rel_cp_id, prob, False)
+
+    def insert_forced_rel_eqv_by_id(self, rel_id, rel_cp_id, prob):
+        self.pr.update_rel_eqv(rel_id, rel_cp_id, prob, True)
 
     def remove_forced_ent_eqv_by_id(self, idx_a, idx_b):
         return self.pr.remove_forced_eqv(idx_a, idx_b)
@@ -96,7 +107,7 @@ class KGs:
     def get_ent_align_name_result(self):
         ent_align_eqv_set = set()
         for (ent_id, ent_cp_id, prob) in self.pr.get_ent_eqv_result():
-            ent_name, ent_cp_name,  = self.kg1.get_ent_name_by_id(ent_id), self.kg2.get_ent_name_by_id(ent_cp_id)
+            ent_name, ent_cp_name = self.kg1.get_ent_name_by_id(ent_id), self.kg2.get_ent_name_by_id(ent_cp_id)
             ent_align_eqv_set.add((ent_name, ent_cp_name, prob))
         return ent_align_eqv_set
 
@@ -110,6 +121,9 @@ class KGs:
                 rel_name, rel_cp_name = self.kg2.get_rel_name_by_id(rel_id), self.kg1.get_rel_name_by_id(rel_cp_id)
                 sup_align_result.add((rel_cp_name, rel_name, prob))
         return sub_align_result, sup_align_result
+
+    def get_inserted_forced_mappings(self):
+        return self.pr.get_forced_eqv_result()
 
     def print_result(self):
         for item in self.pr.get_ent_eqv_result():

@@ -91,30 +91,34 @@ class KG:
     def get_or_insert_lite_id(self, name):
         return self.get_id_from_name_helper(self.name_lite_id_dict, self.lite_id_name_dict, name)
 
-    def get_ent_id_by_name(self, name):
-        ent_name = self.ent_pre_func(name)
+    def get_ent_id_by_name(self, ent_name, pre_proc=True):
+        if pre_proc:
+            ent_name = self.ent_pre_func(ent_name)
         if self.name_ent_id_dict.__contains__(ent_name):
             return self.name_ent_id_dict[ent_name]
 
-    def get_lite_id_by_name(self, name):
-        lite_name = self.rel_pre_func(name)
+    def get_lite_id_by_name(self, lite_name, pre_proc=True):
+        if pre_proc:
+            lite_name = self.rel_pre_func(lite_name)
         if self.name_lite_id_dict.__contains__(lite_name):
             return self.name_rel_id_dict[lite_name]
 
-    def get_rel_id_by_name(self, name):
-        rel_name = self.rel_pre_func(name)
+    def get_rel_id_by_name(self, rel_name, pre_proc=True):
+        if pre_proc:
+            rel_name = self.rel_pre_func(rel_name)
         if self.name_rel_id_dict.__contains__(rel_name):
             return self.name_rel_id_dict[rel_name]
 
-    def get_attr_id_by_name(self, name):
-        attr_name = self.rel_pre_func(name)
+    def get_attr_id_by_name(self, attr_name, pre_proc=True):
+        if pre_proc:
+            attr_name = self.rel_pre_func(attr_name)
         if self.name_attr_id_dict.__contains__(attr_name):
-            return self.name_rel_id_dict[attr_name]
+            return self.name_attr_id_dict[attr_name]
 
     def get_or_insert_inv_rel_id(self, rel_id):
         if not self.rel_inv_dict.__contains__(rel_id):
-            generated_id = self.component_id
-            self.component_id += 1
+            generated_id = KG.component_id
+            KG.component_id += 1
             self.rel_inv_dict[rel_id] = generated_id
             self.rel_inv_dict[generated_id] = rel_id
         return self.rel_inv_dict[rel_id]
@@ -176,6 +180,9 @@ class KG:
     def get_ent_name_by_id(self, idx):
         return self.ent_id_name_dict[idx]
 
+    def get_lite_name_by_id(self, idx):
+        return self.lite_id_name_dict[idx]
+
     def get_rel_name_by_id(self, idx):
         if self.rel_id_name_dict.__contains__(idx):
             return self.rel_id_name_dict[idx]
@@ -184,6 +191,24 @@ class KG:
             inv_name = self.rel_id_name_dict[inv_idx]
             if inv_name is not None:
                 return inv_name + KG.suffix_for_inv_rel
+
+    def get_attr_name_by_id(self, idx):
+        if self.attr_id_name_dict.__contains__(idx):
+            return self.attr_id_name_dict[idx]
+        else:
+            inv_idx = self.rel_inv_dict[idx]
+            inv_name = self.attr_id_name_dict[inv_idx]
+            if inv_name is not None:
+                return inv_name + KG.suffix_for_inv_rel
+
+    def is_inv_rel(self, idx):
+        return not self.rel_id_name_dict.__contains__(idx)
+
+    def is_inv_attr(self, idx):
+        return not self.attr_id_name_dict.__contains__(idx)
+
+    def get_inv_id(self, idx):
+        return self.rel_inv_dict[idx]
 
     @staticmethod
     def reset_component_id():

@@ -366,15 +366,16 @@ public:
     bool remove_forced_equiv(uint64_t, uint64_t);
     double get_ent_equiv(KG*, uint64_t, KG*, uint64_t);
     double get_rel_equiv(uint64_t, uint64_t);
-    std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
     void insert_ongoing_rel_norm(std::unordered_map<uint64_t, double>&);
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void update_rel_eqv_from_ongoing(int);
     void update_ent_eqv_from_ongoing(bool);
     void reset_ongoing_mp();
+    void init_loaded_data();
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
     std::vector<std::tuple<uint64_t, uint64_t, double>> get_rel_eqv_result();
+    std::vector<std::tuple<uint64_t, uint64_t, double>> get_forced_eqv_result();
     std::mutex rel_norm_lock;
     std::mutex rel_deno_lock;
     std::mutex ent_eqv_lock;
@@ -382,12 +383,14 @@ public:
     std::vector<uint64_t>& get_kg_b_unaligned_ents();
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_lite_eqv_mp();
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& get_forced_eqv_mp();
+    std::unordered_map<uint64_t, double>* get_ent_cp_map_ptr(KG*, uint64_t);
 private:
     KG *kg_a, *kg_b;
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
     static double get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t);
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
+    static std::vector<std::tuple<uint64_t, uint64_t, double>> mp_mp_to_tuple(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     static std::unordered_map<uint64_t, double> EMPTY_EQV_MAP;
     std::vector<std::tuple<uint64_t, uint64_t, double>> ent_eqv_tuples;
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> forced_eqv_mp;
@@ -640,6 +643,22 @@ void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
 
 }
 
+void PARISEquiv::init_loaded_data() {
+    ent_eqv_tuples.clear();
+    for (auto iter = ent_eqv_mp.begin(); iter != ent_eqv_mp.end(); ++iter) {
+        uint64_t id = iter -> first;
+        if (!kg_a -> get_ent_set().count(id)) {
+            continue;
+        }
+        std::unordered_map<uint64_t, double>& cp_map = iter -> second;
+        for (auto sub_iter = cp_map.begin(); sub_iter != cp_map.end(); ++sub_iter) {
+            uint64_t cp_id = sub_iter -> first;
+            double prob = sub_iter -> second;
+            ent_eqv_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
+        }
+    }
+}
+
 void PARISEquiv::reset_ongoing_mp() {
     ongoing_ent_eqv_mp.clear();
     ongoing_rel_deno.clear();
@@ -650,19 +669,27 @@ std::vector<std::tuple<uint64_t, uint64_t, double>>& PARISEquiv::get_ent_eqv_res
     return ent_eqv_tuples;
 }
 
-std::vector<std::tuple<uint64_t, uint64_t, double>> PARISEquiv::get_rel_eqv_result() {
-    std::vector<std::tuple<uint64_t, uint64_t, double>> rel_eqv_tuples;
+std::vector<std::tuple<uint64_t, uint64_t, double>> PARISEquiv::mp_mp_to_tuple(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>& mp) {
+    std::vector<std::tuple<uint64_t, uint64_t, double>> result_tuples;
     
-    for (auto iter = rel_eqv_mp.begin(); iter != rel_eqv_mp.end(); ++iter) {
-        uint64_t rel_id = iter -> first;
-        std::unordered_map<uint64_t, double>& mapper = iter  -> second;
+    for (auto iter = mp.begin(); iter != mp.end(); ++iter) {
+        uint64_t id = iter -> first;
+        std::unordered_map<uint64_t, double>& mapper = iter -> second;
         for (auto sub_iter = mapper.begin(); sub_iter != mapper.end(); ++sub_iter) {
-            uint64_t rel_cp_id = sub_iter -> first;
+            uint64_t cp_id = sub_iter -> first;
             double prob = sub_iter -> second;
-            rel_eqv_tuples.emplace_back(std::make_tuple(rel_id, rel_cp_id, prob));
+            result_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
         }
     }
-    return rel_eqv_tuples;
+    return result_tuples;
+}
+
+std::vector<std::tuple<uint64_t, uint64_t, double>> PARISEquiv::get_rel_eqv_result() {
+    return mp_mp_to_tuple(rel_eqv_mp);
+}
+
+std::vector<std::tuple<uint64_t, uint64_t, double>> PARISEquiv::get_forced_eqv_result() {
+    return mp_mp_to_tuple(forced_eqv_mp);
 }
 
 double PARISEquiv::get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>> &mp, uint64_t id_a, uint64_t id_b) {
@@ -751,12 +778,14 @@ public:
     void set_ent_candidate_num(int);
     void set_rel_func_bar(double);
     void set_se_trade_off(double);
+    void init_loaded_data();
     void init();
     void reset_emb_eqv();
     void run();
     bool remove_forced_eqv(uint64_t, uint64_t);
     std::vector<std::tuple<uint64_t, uint64_t, double>> & get_ent_eqv_result();
     std::vector<std::tuple<uint64_t, uint64_t, double>> get_rel_eqv_result();
+    std::vector<std::tuple<uint64_t, uint64_t, double>> get_forced_eqv_result();
     std::vector<uint64_t>& get_kg_a_unaligned_ents();
     std::vector<uint64_t>& get_kg_b_unaligned_ents();
 private:
@@ -825,6 +854,10 @@ void PRModule::init() {
 
 }
 
+void PRModule::init_loaded_data() {
+    paris_eqv -> init_loaded_data();
+}
+
 void PRModule::reset_emb_eqv() {
     emb_eqv -> init(paris_params -> MAX_EMB_EQV_CACHE_NUM);
     
@@ -872,6 +905,10 @@ std::vector<std::tuple<uint64_t, uint64_t, double>> & PRModule::get_ent_eqv_resu
 
 std::vector<std::tuple<uint64_t, uint64_t, double>> PRModule::get_rel_eqv_result() {
     return paris_eqv -> get_rel_eqv_result();
+}
+
+std::vector<std::tuple<uint64_t, uint64_t, double>> PRModule::get_forced_eqv_result() {
+    return paris_eqv -> get_forced_eqv_result();
 }
 
 void PRModule::run() {
@@ -932,7 +969,7 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
         rel_eqv_sup /= _this -> paris_params -> PENALTY_VALUE;
 
         rel_eqv_sub = _this -> get_filtered_prob(rel_id, rel_cp_id, rel_eqv_sub);
-        rel_eqv_sup = _this -> get_filtered_prob(rel_cp_id, rel_id, rel_eqv_sub);
+        rel_eqv_sup = _this -> get_filtered_prob(rel_cp_id, rel_id, rel_eqv_sup);
 
         if (rel_eqv_sub < _this -> paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < _this -> paris_params -> REL_EQV_THRESHOLD) {
             if (_this -> is_rel_init()) {
@@ -1016,8 +1053,11 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
                     uint64_t relation_cp_candidate = sub_iter -> first;
 
                     if (head_cp_ptr -> count(head_cp_candidate)) {
-                        double eqv_prob = _this -> get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
-                        register_ongoing_rel_eqv_deno(rel_ongoing_deno_factor_map, relation_cp_candidate, tail_eqv_prob * eqv_prob);
+                        bool same_type = (kg_l -> is_attribute(relation)) == (kg_r -> is_attribute(relation_cp_candidate));
+                        if (same_type) {
+                            double eqv_prob = _this -> get_filtered_prob(ent_id, head_cp_candidate, (*head_cp_ptr)[head_cp_candidate]);
+                            register_ongoing_rel_eqv_deno(rel_ongoing_deno_factor_map, relation_cp_candidate, tail_eqv_prob * eqv_prob);
+                        } 
                     }
                     
                     if (ent_align) {
@@ -1036,7 +1076,10 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
             for (auto deno_iter = rel_ongoing_deno_factor_map.begin(); deno_iter != rel_ongoing_deno_factor_map.end(); ++deno_iter) {
                 uint64_t relation_cp_candidate = deno_iter -> first;
                 double rel_eqv_deno = 1.0 - (deno_iter -> second);
-
+                bool same_type = (kg_l -> is_attribute(relation)) == (kg_r -> is_attribute(relation_cp_candidate));
+                if (!same_type) {
+                    continue;
+                }
                 if (!rel_ongoing_deno_eqv.count(relation)) {
                     rel_ongoing_deno_eqv[relation] = std::unordered_map<uint64_t, double>();
                 }
@@ -1219,6 +1262,7 @@ PYBIND11_MODULE(prase_core, m)
 
     py::class_<PRModule>(m, "PRModule").def(py::init<KG&, KG&>())
     .def("init", &PRModule::init)
+    .def("init_loaded_data", &PRModule::init_loaded_data)
     .def("update_ent_eqv", &PRModule::update_ent_eqv)
     .def("update_lite_eqv", &PRModule::update_lite_eqv)
     .def("update_rel_eqv", &PRModule::update_rel_eqv)
@@ -1236,5 +1280,6 @@ PYBIND11_MODULE(prase_core, m)
     .def("run", &PRModule::run)
     .def("get_ent_eqv_result", &PRModule::get_ent_eqv_result)
     .def("get_rel_eqv_result", &PRModule::get_rel_eqv_result)
+    .def("get_forced_eqv_result", &PRModule::get_forced_eqv_result)
     ;
 }

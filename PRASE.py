@@ -25,6 +25,7 @@ if __name__ == '__main__':
     kg1_attr_path, kg2_attr_path = args.kg1_attr_path, args.kg2_attr_path
     iteration = args.iterations
     init_run = args.init_run
+    load_path = args.load_path
 
     kg1 = pu.construct_kg(kg1_rel_path, kg1_attr_path)
     kg2 = pu.construct_kg(kg2_rel_path, kg2_attr_path)
@@ -32,11 +33,17 @@ if __name__ == '__main__':
     kgs = pu.construct_kgs(kg1, kg2, GCNAlign)
     kgs.init()
 
-    if init_run:
-        kgs.run_pr()
-    for i in range(iteration):
-        kgs.run_se()
-        kgs.run_pr()
+    if load_path is not None:
+        pu.load_prase_model(kgs, load_path)
+
+    kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_15K_V2\ent_links")
+
+    # if init_run:
+    #     kgs.run_pr()
+    # for i in range(iteration):
+    #     kgs.run_se()
+    #     kgs.run_pr()
 
     # kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\industry\ent_links")
-    print(kgs.get_ent_align_name_result())
+    # print(kgs.get_ent_align_name_result())
+    pu.save_prase_model(kgs, "./model.json")

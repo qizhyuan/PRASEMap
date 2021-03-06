@@ -221,6 +221,12 @@ class KG:
         frequency_dict = self.kg_core.get_attr_frequency_mp()
         return sorted(frequency_dict.items(), key=lambda x: x[1], reverse=True)
 
+    def get_rel_ent_id_tuples_by_ent(self, idx):
+        return self.kg_core.get_rel_ent_tuples_by_ent(idx)
+
+    def get_attr_lite_id_tuples_by_ent(self, idx):
+        return self.kg_core.get_attr_lite_tuples_by_ent(idx)
+
     @staticmethod
     def reset_component_id():
         KG.component_id = 0

@@ -16,7 +16,7 @@ def get_extension():
 
 
 setup(name="prase",
-      version="0.1",
+      version="0.1.1",
       packages=["prase", "se"],
       author="qizhyuan",
       author_email="qizhyuan@gmail.com",

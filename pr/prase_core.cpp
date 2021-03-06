@@ -122,6 +122,8 @@ public:
     void set_ent_embed(uint64_t, Eigen::VectorXd &);
     void clear_ent_embeds();
     Eigen::VectorXd& get_ent_embed(uint64_t);
+    std::set<std::tuple<uint64_t, uint64_t>>& get_rel_ent_tuples_by_ent(uint64_t);
+    std::set<std::tuple<uint64_t, uint64_t>>& get_attr_lite_tuples_by_ent(uint64_t);
 private:
     std::set<uint64_t> ent_set;
     std::set<uint64_t> lite_set;
@@ -131,17 +133,21 @@ private:
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> h_r_t_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_mp;
     std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>> t_r_h_ent_mp;
+    std::unordered_map<uint64_t, std::set<std::tuple<uint64_t, uint64_t>>> ent_rel_ent_mp;
+    std::unordered_map<uint64_t, std::set<std::tuple<uint64_t, uint64_t>>> ent_attr_lite_mp;
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>> relation_triples;
     std::set<std::tuple<uint64_t, uint64_t, uint64_t>> attribute_triples;
     std::map<uint64_t, uint64_t> attr_frequent_mp;
     std::unordered_map<uint64_t, double> functionality_mp;
     std::unordered_map<uint64_t, double> inv_functionality_mp;
     static std::set<std::pair<uint64_t, uint64_t>> EMPTY_PAIR_SET;
+    static std::set<std::tuple<uint64_t, uint64_t>> EMPTY_TWO_TUPLE_SET;
     static void insert_triple(std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>>&, uint64_t, uint64_t, uint64_t);
     static Eigen::VectorXd EMPTY_EMB;
 };
 
 std::set<std::pair<uint64_t, uint64_t>> KG::EMPTY_PAIR_SET = std::set<std::pair<uint64_t, uint64_t>>();
+std::set<std::tuple<uint64_t, uint64_t>> KG::EMPTY_TWO_TUPLE_SET = std::set<std::tuple<uint64_t, uint64_t>>();
 Eigen::VectorXd KG::EMPTY_EMB(1, 1);
 
 void KG::insert_triple(std::unordered_map<uint64_t, std::set<std::pair<uint64_t, uint64_t>>>& target, uint64_t head, uint64_t relation, uint64_t tail) {
@@ -159,6 +165,11 @@ void KG::insert_rel_triple(uint64_t head, uint64_t relation, uint64_t tail) {
     insert_triple(this -> h_r_t_mp, head, relation, tail);
     insert_triple(this -> t_r_h_mp, tail, relation, head);
     insert_triple(this -> t_r_h_ent_mp, tail, relation, head);
+
+    if (!ent_rel_ent_mp.count(head)) {
+        ent_rel_ent_mp[head] = std::set<std::tuple<uint64_t, uint64_t>>();
+    }
+    ent_rel_ent_mp[head].insert(std::make_tuple(relation, tail));
 }
 
 void KG::insert_rel_inv_triple(uint64_t head, uint64_t relation_inv, uint64_t tail) {
@@ -173,6 +184,11 @@ void KG::insert_attr_triple(uint64_t entity, uint64_t attribute, uint64_t litera
     insert_triple(this -> h_r_t_mp, entity, attribute, literal);
     insert_triple(this -> t_r_h_mp, literal, attribute, entity);
     insert_triple(this -> t_r_h_ent_mp, literal, attribute, entity);
+
+    if (!ent_attr_lite_mp.count(entity)) {
+        ent_attr_lite_mp[entity] = std::set<std::tuple<uint64_t, uint64_t>>();
+    }
+    ent_attr_lite_mp[entity].insert(std::make_tuple(attribute, literal)); 
     
     if (!attr_frequent_mp.count(attribute)) {
         attr_frequent_mp[attribute] = 0;
@@ -221,6 +237,21 @@ std::set<std::pair<uint64_t, uint64_t>>* KG::get_rel_ent_head_pairs_ptr(uint64_t
         return &EMPTY_PAIR_SET;
     }
     return &t_r_h_ent_mp[tail_id];
+}
+
+
+ std::set<std::tuple<uint64_t, uint64_t>>& KG::get_rel_ent_tuples_by_ent(uint64_t head_id) {
+    if (!ent_rel_ent_mp.count(head_id)) {
+         return EMPTY_TWO_TUPLE_SET;
+    }
+    return ent_rel_ent_mp[head_id]; 
+ }
+
+std::set<std::tuple<uint64_t, uint64_t>>& KG::get_attr_lite_tuples_by_ent(uint64_t ent_id) {
+    if (!ent_attr_lite_mp.count(ent_id)) {
+        return EMPTY_TWO_TUPLE_SET;
+    }
+    return ent_attr_lite_mp[ent_id];
 }
 
 std::set<uint64_t>& KG::get_ent_set() {
@@ -1276,6 +1307,8 @@ PYBIND11_MODULE(prase_core, m)
     .def("set_ent_embed", &KG::set_ent_embed)
     .def("get_ent_embed", &KG::get_ent_embed)
     .def("clear_ent_embeds", &KG::clear_ent_embeds)
+    .def("get_rel_ent_tuples_by_ent", &KG::get_rel_ent_tuples_by_ent)
+    .def("get_attr_lite_tuples_by_ent", &KG::get_attr_lite_tuples_by_ent)
     .def("test", &KG::test)
     ;
 

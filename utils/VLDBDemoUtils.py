@@ -3,6 +3,13 @@ import os
 import random
 
 
+def get_abbr_name(name):
+    value = name
+    if "/" in value:
+        value = value.split(sep="/")[-1].strip()
+    return value
+
+
 def get_random_candidate_list(ent_list, num=5):
     if len(ent_list) <= num:
         return ent_list
@@ -51,15 +58,15 @@ def generate_node_info_list(kg, entity_set, entity_id_dict, group=None):
         entity_id_dict[ent] = str(new_index)
         ent_info_dict = dict()
         ent_info_dict["nodeId"] = str(new_index)
-        ent_info_dict["nodeName"] = kg.get_ent_name_by_id(ent)
+        ent_info_dict["nodeName"] = get_abbr_name(kg.get_ent_name_by_id(ent))
         if group is not None:
             ent_info_dict["group"] = group
         ent_info_dict["attributes"] = dict()
         for (attr, lite) in kg.get_attr_lite_id_tuples_by_ent(ent):
-            attribute = kg.get_attr_name_by_id(attr)
+            attribute = get_abbr_name(kg.get_attr_name_by_id(attr))
             literal = kg.get_lite_name_by_id(lite)
-            if len(literal) >= 20:
-                literal = literal[:20] + "..."
+            if len(literal) >= 30:
+                literal = literal[:30] + "..."
             ent_info_dict["attributes"][attribute] = literal
         node_info_list.append(ent_info_dict)
         new_index += 1
@@ -74,7 +81,7 @@ def generate_edge_info_list(kg, triple_set, entity_id_dict):
         edge_info_dict = dict()
         h_id = entity_id_dict[h]
         t_id = entity_id_dict[t]
-        r_name = kg.get_rel_name_by_id(r)
+        r_name = get_abbr_name(kg.get_rel_name_by_id(r))
         edge_info_dict["sourceNodeId"] = h_id
         edge_info_dict["targetNodeId"] = t_id
         edge_info_dict["edgeName"] = r_name
@@ -120,7 +127,7 @@ def construct_single_kg_demo_file(kgs, save_path, hop=2, kg1_name="KG1", kg2_nam
             dict_file[kg_index]["subGraphs"]["subGraph-" + str(i + 1)] = dict()
             sub_graph_dict = dict_file[kg_index]["subGraphs"]["subGraph-" + str(i + 1)]
             cent_index = ent_list[i]
-            cent_name = kg.get_ent_name_by_id(cent_index)
+            cent_name = get_abbr_name(kg.get_ent_name_by_id(cent_index))
             sub_graph_dict["centerNodeName"] = cent_name
             sub_graph_dict["centerNodeId"] = None
             sub_graph_dict["nodes"] = list()
@@ -182,8 +189,8 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
             sub_graph_dict = dict_file["subGraphs"]["subGraph-" + str(i + 1)]
             cent_index_l, cent_index_r = ent_pairs[i][0], ent_pairs[i][1]
 
-            sub_graph_dict["centerNodeName-1"] = kgs.kg1.get_ent_name_by_id(cent_index_l)
-            sub_graph_dict["centerNodeName-2"] = kgs.kg2.get_ent_name_by_id(cent_index_r)
+            sub_graph_dict["centerNodeName-1"] = get_abbr_name(kgs.kg1.get_ent_name_by_id(cent_index_l))
+            sub_graph_dict["centerNodeName-2"] = get_abbr_name(kgs.kg2.get_ent_name_by_id(cent_index_r))
             sub_graph_dict["centerNodeId-1"] = None
             sub_graph_dict["centerNodeId-2"] = None
 

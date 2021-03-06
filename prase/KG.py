@@ -16,6 +16,8 @@ class KG:
 
         self.kg_core = pc.KG()
 
+        self.id_raw_name_dict = dict()
+
         self.ent_id_name_dict = dict()
         self.rel_id_name_dict = dict()
         self.attr_id_name_dict = dict()
@@ -48,8 +50,8 @@ class KG:
             print("Match Error: " + name)
             return name
         value = matchObj.group(1).strip()
-        if "/" in value:
-            value = value.split(sep="/")[-1].strip()
+        # if "/" in value:
+        #     value = value.split(sep="/")[-1].strip()
         return value
 
     @staticmethod

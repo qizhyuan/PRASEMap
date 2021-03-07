@@ -166,7 +166,7 @@ def save_prase_model(kgs, target_path, save_emb=False):
             if ent_emb is not None:
                 save_dict["data"]["ent_embeddings"]["KG2"][ent_name] = ent_emb.tolist()
 
-    with open(file_name, "w", encoding="utf8") as f:
+    with open(target_path, "w", encoding="utf8") as f:
         json.dump(save_dict, f, indent=4)
 
 
@@ -271,24 +271,4 @@ def load_prase_model(kgs, source_path):
         kgs.kg2.insert_ent_embed_by_id(ent_id, embed)
 
     kgs.pr.init_loaded_data()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -725,13 +725,19 @@ void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
         kg_b_unaligned_ents.clear();
 
         for (auto ent_id : kg_a -> get_ent_set()) {
-            if (!visited.count(ent_id)) {
+            // if (!visited.count(ent_id)) {
+            //     kg_a_unaligned_ents.push_back(ent_id);
+            // }
+            if (!ent_eqv_mp.count(ent_id)) {
                 kg_a_unaligned_ents.push_back(ent_id);
             }
         }
 
         for (auto ent_id : kg_b -> get_ent_set()) {
-            if (!visited.count(ent_id)) {
+            // if (!visited.count(ent_id)) {
+            //     kg_b_unaligned_ents.push_back(ent_id);
+            // }
+            if (!ent_eqv_mp.count(ent_id)) {
                 kg_b_unaligned_ents.push_back(ent_id);
             }
         }

@@ -1,8 +1,8 @@
 import argparse
 
+import se
 import utils.PRASEUtils as pu
 import utils.VLDBDemoUtils as vu
-import se
 
 parser = argparse.ArgumentParser(description="Probabilistic Reasoning and Semantic Embedding")
 
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     kg1 = pu.construct_kg(kg1_rel_path, kg1_attr_path)
     kg2 = pu.construct_kg(kg2_rel_path, kg2_attr_path)
 
-    kgs = pu.construct_kgs(kg1, kg2, se.GCNAlign)
+    kgs = pu.construct_kgs(kg1, kg2, se.GCNAlign, epoch_num=100)
     kgs.init()
 
     # kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\industry\ent_links")
@@ -53,11 +53,11 @@ if __name__ == '__main__':
     if init_run:
         kgs.run_pr()
 
-    kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_15K_V2\ent_links", threshold=[0.1 * i for i in range(10)])
+    kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links", threshold=[0.1 * i for i in range(10)])
     for i in range(iteration):
         kgs.run_se()
         kgs.run_pr()
-        kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_15K_V2\ent_links",
+        kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links",
                  threshold=[0.1 * i for i in range(10)])
 
     if save_path is not None:

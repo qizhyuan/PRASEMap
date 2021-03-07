@@ -1,15 +1,18 @@
 import time
 from prase import KGs
 import math
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 # import tensorflow as tf
 import tensorflow.compat.v1 as tf
+tf.logging.set_verbosity(tf.logging.ERROR)
 import scipy.sparse as sp
 import numpy as np
 from scipy.spatial.distance import cdist
 tf.disable_v2_behavior()
 
 _LAYER_UIDS = {}
-
 '''
 This implementation is based on https://github.com/1049451037/GCN-Align
 '''
@@ -605,9 +608,14 @@ class GCNAlign:
         kg2_matched_pairs = set([(kg2_counterpart[i], i) for i in range(len(kg2_counterpart))])
         kg_matched_pairs = kg1_matched_pairs & kg2_matched_pairs
 
+        self.kgs.se_feedback_pairs.clear()
+
         for (kg1_ent, kg2_ent) in kg_matched_pairs:
             kg1_emb_id, kg2_emb_id = self.kg1_test_ent_list[kg1_ent], self.kg2_test_ent_list[kg2_ent]
             kg1_id, kg2_id = self.embed_idx_dict_inv[kg1_emb_id], self.embed_idx_dict_inv[kg2_emb_id]
+            self.kgs.se_feedback_pairs.add((kg1_id, kg2_id))
+            if distance[kg1_ent][kg2_ent] < 0.2:
+                continue
             self.kgs.insert_ent_eqv_both_way_by_id(kg1_id, kg2_id, prob)
 
     def embedding_feed_back_to_pr(self, beta=0.9):

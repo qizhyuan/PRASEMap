@@ -74,6 +74,64 @@ def generate_node_info_list(kg, entity_set, entity_id_dict, group=None):
     return node_info_list, entity_id_dict
 
 
+def generate_pairs_for_correction(kgs):
+    correction_pair_candidates1 = kgs.se_feedback_pairs.copy()
+    if len(correction_pair_candidates1) >= 500:
+        correction_pair_candidates1 = random.sample(correction_pair_candidates1, 500)
+
+    correction_pair_candidates2 = set()
+    aligned_pairs = kgs.get_ent_align_ids_result()
+    for (ent, ent_cp, prob) in aligned_pairs:
+        if prob < 0.5:
+            correction_pair_candidates2.add((ent, ent_cp))
+
+    if len(correction_pair_candidates2) >= 500:
+        correction_pair_candidates2 = random.sample(correction_pair_candidates2, 500)
+    else:
+        if len(aligned_pairs) < 500:
+            correction_pair_candidates2 = aligned_pairs.copy()
+        else:
+            correction_pair_candidates2 = random.sample(aligned_pairs, 500)
+    correction_pair_candidates1 = set(correction_pair_candidates1)
+    correction_pair_candidates2 = set(correction_pair_candidates2)
+
+    correction_pair_candidates = list(correction_pair_candidates1 | correction_pair_candidates2)
+    correction_index = range(len(correction_pair_candidates))
+
+    if len(correction_index) > 200:
+        correction_index = random.sample(correction_index, 200)
+
+    correction_list = [(correction_pair_candidates[i][0], correction_pair_candidates[i][1]) for i in correction_index]
+    result_list = list()
+    # result_dict["markingNum"] = len(correction_list)
+
+    def generate_node_info(kg, node_id):
+        node_info_dict = dict()
+        name = kg.get_ent_name_by_id(node_id)
+        node_info_dict["nodeName"] = name
+        node_info_dict["relations"] = dict()
+        node_info_dict["attributes"] = dict()
+        for (attr, lite) in kg.get_attr_lite_id_tuples_by_ent(node_id):
+            attribute = get_abbr_name(kg.get_attr_name_by_id(attr))
+            literal = kg.get_lite_name_by_id(lite)
+            if len(literal) >= 30:
+                literal = literal[:30] + "..."
+            node_info_dict["attributes"][attribute] = literal
+
+        for (rel, tail) in kg.get_rel_ent_id_tuples_by_ent(node_id):
+            relation = get_abbr_name(kg.get_rel_name_by_id(rel))
+            entity = get_abbr_name(kg.get_ent_name_by_id(tail))
+            node_info_dict["relations"][relation] = entity
+        return node_info_dict
+
+    for (ent, ent_cp) in correction_list:
+        node_info1, node_info2 = generate_node_info(kgs.kg1, ent), generate_node_info(kgs.kg2, ent_cp)
+        item_dict = {"KG1": node_info1, "KG2": node_info2}
+        result_list.append(item_dict)
+
+    return result_list
+
+
 def generate_edge_info_list(kg, triple_set, entity_id_dict):
     edge_info_list = list()
 
@@ -90,7 +148,7 @@ def generate_edge_info_list(kg, triple_set, entity_id_dict):
     return edge_info_list
 
 
-def construct_single_kg_demo_file(kgs, save_path, hop=2, kg1_name="KG1", kg2_name="KG2"):
+def construct_single_kg_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_name="KG2"):
     base, path = os.path.split(save_path)
     if not os.path.exists(base):
         os.makedirs(base)
@@ -178,6 +236,7 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
     ent_mappings.sort(key=lambda x: calculate_score(x), reverse=True)
 
     ent_pairs = get_random_candidate_list(ent_mappings)
+    demo_dict["info"] = dict()
 
     def construction(dict_file, hop_num):
         dict_file["info"] = dict()
@@ -231,6 +290,13 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
 
     construction(demo_dict, hop)
 
+    correction_list = generate_pairs_for_correction(kgs)
+    demo_dict["markingList"] = correction_list
+    demo_dict["info"]["markingNum"] = len(correction_list)
+
     with open(save_path, "w", encoding="utf8") as f:
         json.dump(demo_dict, f, indent=4)
+
+
+
 

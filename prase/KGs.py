@@ -12,6 +12,8 @@ class KGs:
         self.pr = pc.PRModule(kg1.kg_core, kg2.kg_core)
         self.se = None
 
+        self.se_feedback_pairs = set()
+
         if se_module is not None:
             self.se = se_module(self, **kwargs)
 

@@ -1255,31 +1255,31 @@ void PRModule::one_iteration() {
         for (uint64_t ent : ents) {
             ent_queue.push(ent);
         }
-        std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
+        // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     };
 
-    std::cout<<"iteration num: "<<iteration<<std::endl;
+    // std::cout<<"iteration num: "<<iteration<<std::endl;
 
-    std::cout<<"one_iteration_one_way"<<std::endl;
+    // std::cout<<"one_iteration_one_way"<<std::endl;
     set_ent_queue(kg_a);
     // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     one_iteration_one_way(ent_queue, kg_a, kg_b, true);
 
 
-    std::cout<<"update_ent_eqv"<<std::endl;
+    // std::cout<<"update_ent_eqv"<<std::endl;
     bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
     paris_eqv -> update_ent_eqv_from_ongoing(update_unaligned_ents);
 
-    std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
-    std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
+    // std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
+    // std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
 
     set_ent_queue(kg_b);
     // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
 
-    std::cout<<"one_iteration_one_way"<<std::endl;
+    // std::cout<<"one_iteration_one_way"<<std::endl;
     one_iteration_one_way(ent_queue, kg_b, kg_a, false);
 
-    std::cout<<"update_rel_eqv"<<std::endl;
+    // std::cout<<"update_rel_eqv"<<std::endl;
     paris_eqv -> update_rel_eqv_from_ongoing(paris_params -> SMOOTH_NORM);
 
 }

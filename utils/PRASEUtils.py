@@ -5,6 +5,9 @@ import numpy as np
 
 
 def construct_kg(path_r, path_a=None, sep='\t'):
+    if not os.path.exists(path_r):
+        print("Error: KG relation triple file does not exist.")
+        return
     kg = KG()
 
     with open(path_r, "r", encoding="utf-8") as f:
@@ -17,6 +20,10 @@ def construct_kg(path_r, path_a=None, sep='\t'):
             h, r, t = params[0].strip(), params[1].strip(), params[2].strip()
             kg.insert_rel_triple(h, r, t)
 
+    if not os.path.exists(path_a):
+        print("Warn: KG attribute triple file does not exist.")
+        return kg
+
     with open(path_a, "r", encoding="utf-8") as f:
         for line in f.readlines():
             if len(line.strip()) == 0:
@@ -25,7 +32,6 @@ def construct_kg(path_r, path_a=None, sep='\t'):
             if len(params) != 3:
                 print(line)
                 continue
-            # assert len(params) == 3
             e, a, v = params[0].strip(), params[1].strip(), params[2].strip()
             kg.insert_attr_triple(e, a, v)
 

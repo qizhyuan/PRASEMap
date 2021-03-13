@@ -67,7 +67,7 @@ class KG:
         if end > 0 and value[end] == '"':
             end -= 1
         if start > end:
-            print("Match Error: " + name)
+            # print("Match Error: " + name)
             return name
         value = value[start: end + 1].strip()
         return value

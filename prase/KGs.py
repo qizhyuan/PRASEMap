@@ -142,53 +142,53 @@ class KGs:
     def get_inserted_forced_mappings(self):
         return self.pr.get_forced_eqv_result()
 
-    def print_result(self):
-        for item in self.pr.get_ent_eqv_result():
-            print(item)
+    # def print_result(self):
+    #     for item in self.pr.get_ent_eqv_result():
+    #         print(item)
 
-    def test(self, test_path, threshold=0.0):
-        gold_result = set()
-        with open(test_path, "r", encoding="utf8") as f:
-            for line in f.readlines():
-                params = str.strip(line).split("\t")
-                ent_l, ent_r = params[0].strip(), params[1].strip()
-                obj_l, obj_r = self.kg1.get_ent_id_by_name(ent_l), self.kg2.get_ent_id_by_name(ent_r)
-                if obj_l is None:
-                    print("Exception: fail to load Entity (" + ent_l + ")")
-                if obj_r is None:
-                    print("Exception: fail to load Entity (" + ent_r + ")")
-                if obj_l is None or obj_r is None:
-                    continue
-                gold_result.add((obj_l, obj_r))
-
-        threshold_list = []
-        if isinstance(threshold, float) or isinstance(threshold, int):
-            threshold_list.append(float(threshold))
-        else:
-            threshold_list = threshold
-
-        for threshold_item in threshold_list:
-            ent_align_result = set()
-            for (ent_id, counterpart_id, prob) in self.pr.get_ent_eqv_result():
-                if prob > threshold_item:
-                    ent_align_result.add((ent_id, counterpart_id))
-
-            correct_num = len(gold_result & ent_align_result)
-            predict_num = len(ent_align_result)
-            total_num = len(gold_result)
-
-            if predict_num == 0:
-                print("Threshold: " + format(threshold_item, ".3f") + "\tException: no satisfied alignment result")
-                continue
-
-            if total_num == 0:
-                print("Threshold: " + format(threshold_item, ".3f") + "\tException: no satisfied instance for testing")
-            else:
-                precision, recall = correct_num / predict_num, correct_num / total_num
-                if precision <= 0.0 or recall <= 0.0:
-                    print("Threshold: " + format(threshold_item, ".3f") + "\tPrecision: " + format(precision, ".6f") +
-                          "\tRecall: " + format(recall, ".6f") + "\tF1-Score: Nan")
-                else:
-                    f1_score = 2.0 * precision * recall / (precision + recall)
-                    print("Threshold: " + format(threshold_item, ".3f") + "\tPrecision: " + format(precision, ".6f") +
-                          "\tRecall: " + format(recall, ".6f") + "\tF1-Score: " + format(f1_score, ".6f"))
+    # def test(self, test_path, threshold=0.0):
+    #     gold_result = set()
+    #     with open(test_path, "r", encoding="utf8") as f:
+    #         for line in f.readlines():
+    #             params = str.strip(line).split("\t")
+    #             ent_l, ent_r = params[0].strip(), params[1].strip()
+    #             obj_l, obj_r = self.kg1.get_ent_id_by_name(ent_l), self.kg2.get_ent_id_by_name(ent_r)
+    #             if obj_l is None:
+    #                 print("Exception: fail to load Entity (" + ent_l + ")")
+    #             if obj_r is None:
+    #                 print("Exception: fail to load Entity (" + ent_r + ")")
+    #             if obj_l is None or obj_r is None:
+    #                 continue
+    #             gold_result.add((obj_l, obj_r))
+    #
+    #     threshold_list = []
+    #     if isinstance(threshold, float) or isinstance(threshold, int):
+    #         threshold_list.append(float(threshold))
+    #     else:
+    #         threshold_list = threshold
+    #
+    #     for threshold_item in threshold_list:
+    #         ent_align_result = set()
+    #         for (ent_id, counterpart_id, prob) in self.pr.get_ent_eqv_result():
+    #             if prob > threshold_item:
+    #                 ent_align_result.add((ent_id, counterpart_id))
+    #
+    #         correct_num = len(gold_result & ent_align_result)
+    #         predict_num = len(ent_align_result)
+    #         total_num = len(gold_result)
+    #
+    #         if predict_num == 0:
+    #             print("Threshold: " + format(threshold_item, ".3f") + "\tException: no satisfied alignment result")
+    #             continue
+    #
+    #         if total_num == 0:
+    #             print("Threshold: " + format(threshold_item, ".3f") + "\tException: no satisfied instance for testing")
+    #         else:
+    #             precision, recall = correct_num / predict_num, correct_num / total_num
+    #             if precision <= 0.0 or recall <= 0.0:
+    #                 print("Threshold: " + format(threshold_item, ".3f") + "\tPrecision: " + format(precision, ".6f") +
+    #                       "\tRecall: " + format(recall, ".6f") + "\tF1-Score: Nan")
+    #             else:
+    #                 f1_score = 2.0 * precision * recall / (precision + recall)
+    #                 print("Threshold: " + format(threshold_item, ".3f") + "\tPrecision: " + format(precision, ".6f") +
+    #                       "\tRecall: " + format(recall, ".6f") + "\tF1-Score: " + format(f1_score, ".6f"))

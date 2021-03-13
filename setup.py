@@ -5,12 +5,9 @@ from setuptools import setup, Extension, find_packages
 def get_extension():
     file_path = os.path.abspath(__file__)
     base, _ = os.path.split(file_path)
-    print(base)
-    print("haha")
     pybind_path = os.path.join(base, "dependence/pybind11-2.6/include")
     eigen_path = os.path.join(base, "dependence/eigen-3.3.9")
     core_path = os.path.join(base, "pr/prase_core.cpp")
-    print(core_path)
     prase_core_module = Extension(name='prase_core', sources=[core_path], include_dirs=[pybind_path, eigen_path])
     return [prase_core_module]
 

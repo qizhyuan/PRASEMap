@@ -1,5 +1,4 @@
 import argparse
-
 import se
 import utils.PRASEUtils as pu
 import utils.VLDBDemoUtils as vu
@@ -11,24 +10,24 @@ parser.add_argument("--kg2_rel_path", type=str, help="the path of KG2's relation
 parser.add_argument("--kg1_attr_path", type=str, help="the path of KG1's attribute triple file")
 parser.add_argument("--kg2_attr_path", type=str, help="the path of KG2's attribute triple file")
 
-parser.add_argument("--ent_mapping_path", type=str, help="the path of the file containing equivalent entity mappings")
-
 parser.add_argument("--iterations", type=int, default=1, help="PRASE iteration number")
 parser.add_argument("--load_path", type=str, help="load the PRASE model from path")
 parser.add_argument("--save_path", type=str, help="save the PRASE model to path")
 parser.add_argument("--save_emb", action="store_true", default=False, help="enable saving the entity embeddings of PRASE model")
 
-parser.add_argument("--disable_init_run", action="store_true", default=False, help="disable running pr first for unsupervised initialization")
+# parser.add_argument("--disable_init_run", action="store_true", default=False, help="disable running pr first for unsupervised initialization")
 
 parser.add_argument("--save_kg_demo_path", type=str, help="save the KG demonstration file to path")
 parser.add_argument("--save_mapping_demo_path", type=str, help="save the entity mapping file to path")
+parser.add_argument("--save_mapping_result_path", type=str, help="save the entity mapping results to path for user download")
+parser.add_argument("--forced_file_path", type=str, help="the path of the file containing forced equivalent entity mappings")
 
 if __name__ == '__main__':
     args = parser.parse_args()
     kg1_rel_path, kg2_rel_path = args.kg1_rel_path, args.kg2_rel_path
     kg1_attr_path, kg2_attr_path = args.kg1_attr_path, args.kg2_attr_path
     iteration = args.iterations
-    init_run = not args.disable_init_run
+    # init_run = not args.disable_init_run
 
     load_path = args.load_path
     save_path = args.save_path
@@ -36,6 +35,10 @@ if __name__ == '__main__':
 
     save_kg_demo_path = args.save_kg_demo_path
     save_mapping_demo_path = args.save_mapping_demo_path
+    save_mapping_result_path = args.save_mapping_result_path
+    forced_file_path = args.forced_file_path
+
+    init_run = load_path is None
 
     kg1 = pu.construct_kg(kg1_rel_path, kg1_attr_path)
     kg2 = pu.construct_kg(kg2_rel_path, kg2_attr_path)
@@ -48,17 +51,17 @@ if __name__ == '__main__':
         pu.load_prase_model(kgs, load_path)
         kgs.pr.enable_rel_init(False)
 
+    if forced_file_path is not None:
+        vu.load_forced_ent_mappings(kgs, forced_file_path)
+
     # kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\industry\ent_links", threshold=[0.1 * i for i in range(10)])
 
     if init_run:
         kgs.run_pr()
 
-    kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links", threshold=[0.1 * i for i in range(10)])
     for i in range(iteration):
-        kgs.run_se()
+        kgs.run_se(embedding_feedback=True, mapping_feedback=True)
         kgs.run_pr()
-        kgs.test(test_path=r"D:\repos\self\PARIS-PYTHON\dataset\EN_DE_100K_V2\ent_links",
-                 threshold=[0.1 * i for i in range(10)])
 
     if save_path is not None:
         pu.save_prase_model(kgs, save_path, save_emb=save_emb)
@@ -68,3 +71,6 @@ if __name__ == '__main__':
 
     if save_mapping_demo_path is not None:
         vu.construct_kg_mappings_demo_file(kgs, save_mapping_demo_path)
+
+    if save_mapping_result_path is not None:
+        vu.save_ent_mapping_result(kgs, save_mapping_result_path)

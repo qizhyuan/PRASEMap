@@ -49,3 +49,4 @@ dependence/
 prase/__pycache__/
 se/__pycache__/
 *.json
+/test

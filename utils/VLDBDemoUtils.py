@@ -15,12 +15,12 @@ def get_random_candidate_list(ent_list, num=5):
         return ent_list
     if num < len(ent_list) <= num * 10:
         return random.sample(ent_list, num)
-    candidate_num = int(len(ent_list) * 0.15)
+    candidate_num = 3 * num
     new_ent_list = ent_list[:candidate_num]
     return random.sample(new_ent_list, num)
 
 
-def generate_node_and_edge_sets(kg, cent_node, hop_num):
+def generate_node_and_edge_sets(kg, cent_node, hop_num, max_edge_num=2):
     triple_set = set()
     entity_set = set()
     entity_set.add(cent_node)
@@ -35,10 +35,15 @@ def generate_node_and_edge_sets(kg, cent_node, hop_num):
                     next_newly_added_ent_set.add(tail)
         newly_added_ent_set = next_newly_added_ent_set
 
+    visited = dict()
     for ent in entity_set:
         for (rel, tail) in kg.get_rel_ent_id_tuples_by_ent(ent):
             if tail in entity_set:
-                triple_set.add((ent, rel, tail))
+                if not visited.__contains__((ent, tail)):
+                    visited[(ent, tail)] = 0
+                visited[(ent, tail)] += 1
+                if visited[(ent, tail)] <= max_edge_num:
+                    triple_set.add((ent, rel, tail))
 
     new_triple_set = set()
     for (h, r, t) in triple_set:
@@ -76,22 +81,18 @@ def generate_node_info_list(kg, entity_set, entity_id_dict, group=None):
 
 def generate_pairs_for_correction(kgs):
     correction_pair_candidates1 = kgs.se_feedback_pairs.copy()
-    if len(correction_pair_candidates1) >= 500:
-        correction_pair_candidates1 = random.sample(correction_pair_candidates1, 500)
+    if len(correction_pair_candidates1) >= 300:
+        correction_pair_candidates1 = random.sample(correction_pair_candidates1, 300)
 
-    correction_pair_candidates2 = set()
     aligned_pairs = kgs.get_ent_align_ids_result()
-    for (ent, ent_cp, prob) in aligned_pairs:
-        if prob < 0.5:
-            correction_pair_candidates2.add((ent, ent_cp))
+    aligned_pairs.sort(key=lambda x: x[2], reverse=False)
 
-    if len(correction_pair_candidates2) >= 500:
-        correction_pair_candidates2 = random.sample(correction_pair_candidates2, 500)
+    if len(aligned_pairs) > 500:
+        correction_pair_candidates2 = set(aligned_pairs[:500])
     else:
-        if len(aligned_pairs) < 500:
-            correction_pair_candidates2 = aligned_pairs.copy()
-        else:
-            correction_pair_candidates2 = random.sample(aligned_pairs, 500)
+        correction_pair_candidates2 = aligned_pairs.copy()
+
+
     correction_pair_candidates1 = set(correction_pair_candidates1)
     correction_pair_candidates2 = set(correction_pair_candidates2)
 
@@ -101,7 +102,7 @@ def generate_pairs_for_correction(kgs):
     if len(correction_index) > 200:
         correction_index = random.sample(correction_index, 200)
 
-    correction_list = [(correction_pair_candidates[i][0], correction_pair_candidates[i][1]) for i in correction_index]
+    correction_set = set((correction_pair_candidates[i][0], correction_pair_candidates[i][1]) for i in correction_index)
     result_list = list()
     # result_dict["markingNum"] = len(correction_list)
 
@@ -124,9 +125,9 @@ def generate_pairs_for_correction(kgs):
             node_info_dict["relations"][relation] = entity
         return node_info_dict
 
-    for (ent, ent_cp) in correction_list:
+    for (ent, ent_cp) in correction_set:
         node_info1, node_info2 = generate_node_info(kgs.kg1, ent), generate_node_info(kgs.kg2, ent_cp)
-        item_dict = {"KG1": node_info1, "KG2": node_info2}
+        item_dict = {"sourceKG": node_info1, "targetKG": node_info2}
         result_list.append(item_dict)
 
     return result_list
@@ -154,36 +155,42 @@ def construct_single_kg_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_nam
         os.makedirs(base)
 
     demo_dict = dict()
+    demo_dict["KG1"] = construct_single_kg_demo_dict(kgs.kg1, kg1_name, hop)
+    demo_dict["KG2"] = construct_single_kg_demo_dict(kgs.kg2, kg2_name, hop)
+
+    with open(save_path, "w", encoding="utf8") as f:
+        json.dump(demo_dict, f, indent=4)
+
+
+def construct_single_kg_demo_dict(kg, kg_name="KG1", hop=1):
 
     def calculate_score(kg, ent_id):
         tuples = kg.get_rel_ent_id_tuples_by_ent(ent_id)
-        return len(tuples)
+        score = float(len(tuples))
+        if score > 25:
+            score = 5 + 10 * random.random()
+        return score
 
-    kg1_ent_list = list(kgs.kg1.get_ent_id_set())
-    kg2_ent_list = list(kgs.kg2.get_ent_id_set())
-    kg1_ent_list.sort(key=lambda x: calculate_score(kgs.kg1, x), reverse=True)
-    kg2_ent_list.sort(key=lambda x: calculate_score(kgs.kg2, x), reverse=True)
+    kg_ent_list = list(kg.get_ent_id_set())
+    kg_ent_list.sort(key=lambda x: calculate_score(kg, x), reverse=True)
 
-    kg1_ent_list = get_random_candidate_list(kg1_ent_list)
-    kg2_ent_list = get_random_candidate_list(kg2_ent_list)
+    kg_ent_list = get_random_candidate_list(kg_ent_list)
+    demo_dict = dict()
 
-    demo_dict["KG1"] = dict()
-    demo_dict["KG2"] = dict()
-
-    def construction(dict_file, kg, kg_index, ent_list, hop_num, kg_name):
-        dict_file[kg_index]["info"] = dict()
-        dict_file[kg_index]["info"]["kgName"] = kg_name
-        dict_file[kg_index]["info"]["entNum"] = len(kg.get_ent_id_set())
-        dict_file[kg_index]["info"]["relNum"] = int(len(kg.get_rel_id_set()) / 2)
-        dict_file[kg_index]["info"]["attrNum"] = int(len(kg.get_attr_id_set()) / 2)
-        dict_file[kg_index]["info"]["liteNum"] = int(len(kg.get_lite_id_set()) / 2)
-        dict_file[kg_index]["info"]["relTripleNum"] = int(len(kg.get_relation_id_triples()) / 2)
-        dict_file[kg_index]["info"]["attrTripleNum"] = int(len(kg.get_attribute_id_triples()) / 2)
-        dict_file[kg_index]["subGraphs"] = dict()
-        dict_file[kg_index]["subGraphs"]["subGraphNum"] = len(ent_list)
+    def construction(dict_file, kg, ent_list, hop_num, kg_name):
+        dict_file["info"] = dict()
+        dict_file["info"]["kgName"] = kg_name
+        dict_file["info"]["entNum"] = len(kg.get_ent_id_set())
+        dict_file["info"]["relNum"] = int(len(kg.get_rel_id_set()) / 2)
+        dict_file["info"]["attrNum"] = int(len(kg.get_attr_id_set()) / 2)
+        dict_file["info"]["liteNum"] = int(len(kg.get_lite_id_set()) / 2)
+        dict_file["info"]["relTripleNum"] = int(len(kg.get_relation_id_triples()) / 2)
+        dict_file["info"]["attrTripleNum"] = int(len(kg.get_attribute_id_triples()) / 2)
+        dict_file["subGraphs"] = dict()
+        dict_file["subGraphs"]["subGraphNum"] = len(ent_list)
         for i in range(len(ent_list)):
-            dict_file[kg_index]["subGraphs"]["subGraph-" + str(i + 1)] = dict()
-            sub_graph_dict = dict_file[kg_index]["subGraphs"]["subGraph-" + str(i + 1)]
+            dict_file["subGraphs"]["subGraph-" + str(i + 1)] = dict()
+            sub_graph_dict = dict_file["subGraphs"]["subGraph-" + str(i + 1)]
             cent_index = ent_list[i]
             cent_name = get_abbr_name(kg.get_ent_name_by_id(cent_index))
             sub_graph_dict["centerNodeName"] = cent_name
@@ -202,11 +209,8 @@ def construct_single_kg_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_nam
 
             sub_graph_dict["centerNodeId"] = entity_new_id_dict[cent_index]
 
-    construction(demo_dict, kgs.kg1, "KG1", kg1_ent_list, hop, kg1_name)
-    construction(demo_dict, kgs.kg2, "KG2", kg2_ent_list, hop, kg2_name)
-
-    with open(save_path, "w", encoding="utf8") as f:
-        json.dump(demo_dict, f, indent=4)
+    construction(demo_dict, kg, kg_ent_list, hop, kg_name)
+    return demo_dict
 
 
 def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_name="KG2"):
@@ -214,6 +218,13 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
     if not os.path.exists(base):
         os.makedirs(base)
 
+    demo_dict = construct_kg_mappings_demo_dict(kgs, kg1_name, kg2_name, hop)
+
+    with open(save_path, "w", encoding="utf8") as f:
+        json.dump(demo_dict, f, indent=4)
+
+
+def construct_kg_mappings_demo_dict(kgs, kg1_name="KG1", kg2_name="KG2", hop=1):
     demo_dict = dict()
 
     ent_mappings = kgs.get_ent_align_ids_result()
@@ -230,16 +241,32 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
         ent_l, ent_r, prob = x[0], x[1], x[2]
         deg1 = len(kgs.kg1.get_rel_ent_id_tuples_by_ent(ent_l))
         deg2 = len(kgs.kg2.get_rel_ent_id_tuples_by_ent(ent_r))
-        score = (deg1 + deg2) * prob
+        if deg1 + deg2 > 50:
+            score = prob
+        else:
+            score = (deg1 + deg2) * prob
         return score
 
     ent_mappings.sort(key=lambda x: calculate_score(x), reverse=True)
 
     ent_pairs = get_random_candidate_list(ent_mappings)
     demo_dict["info"] = dict()
+    demo_dict["info"]["sourceKG"] = dict()
+    demo_dict["info"]["targetKG"] = dict()
+
+    def add_kg_info(info_dict_file, kg, kg_name):
+        info_dict_file["kgName"] = kg_name
+        info_dict_file["entNum"] = len(kg.get_ent_id_set())
+        info_dict_file["relNum"] = int(len(kg.get_rel_id_set()) / 2)
+        info_dict_file["attrNum"] = int(len(kg.get_attr_id_set()) / 2)
+        info_dict_file["liteNum"] = int(len(kg.get_lite_id_set()) / 2)
+        info_dict_file["relTripleNum"] = int(len(kg.get_relation_id_triples()) / 2)
+        info_dict_file["attrTripleNum"] = int(len(kg.get_attribute_id_triples()) / 2)
+
+    add_kg_info(demo_dict["info"]["sourceKG"], kgs.kg1, kg1_name)
+    add_kg_info(demo_dict["info"]["targetKG"], kgs.kg2, kg2_name)
 
     def construction(dict_file, hop_num):
-        dict_file["info"] = dict()
         dict_file["info"]["mappingNum"] = len(kgs.get_ent_align_ids_result())
         dict_file["subGraphs"] = dict()
         dict_file["subGraphs"]["subGraphNum"] = len(ent_pairs)
@@ -257,8 +284,10 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
             entity_set_r, triple_set_r = generate_node_and_edge_sets(kgs.kg2, cent_index_r, hop_num)
 
             entity_new_id_dict = dict()
-            ent_info_list_l, entity_new_id_dict = generate_node_info_list(kgs.kg1, entity_set_l, entity_new_id_dict, "KG1")
-            ent_info_list_r, entity_new_id_dict = generate_node_info_list(kgs.kg2, entity_set_r, entity_new_id_dict, "KG2")
+            ent_info_list_l, entity_new_id_dict = generate_node_info_list(kgs.kg1, entity_set_l, entity_new_id_dict,
+                                                                          "sourceKG")
+            ent_info_list_r, entity_new_id_dict = generate_node_info_list(kgs.kg2, entity_set_r, entity_new_id_dict,
+                                                                          "targetKG")
 
             edge_info_list_l = generate_edge_info_list(kgs.kg1, triple_set_l, entity_new_id_dict)
             edge_info_list_r = generate_edge_info_list(kgs.kg2, triple_set_r, entity_new_id_dict)
@@ -293,10 +322,29 @@ def construct_kg_mappings_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_n
     correction_list = generate_pairs_for_correction(kgs)
     demo_dict["markingList"] = correction_list
     demo_dict["info"]["markingNum"] = len(correction_list)
+    return demo_dict
+
+
+def save_ent_mapping_result(kgs, save_path):
+    base, path = os.path.split(save_path)
+    if not os.path.exists(base):
+        os.makedirs(base)
 
     with open(save_path, "w", encoding="utf8") as f:
-        json.dump(demo_dict, f, indent=4)
+        for (ent, ent_cp, prob) in kgs.get_ent_align_name_result():
+            f.write("\t".join([ent, ent_cp, format(prob, ".6f")]) + "\n")
 
 
+def load_forced_ent_mappings(kgs, load_path):
+    if not os.path.exists(load_path):
+        return
+
+    with open(load_path, "r", encoding="utf8") as f:
+        for line in f.readlines():
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            ent_name, ent_cp_name, prob = line.split(sep="\t")
+            kgs.insert_forced_ent_eqv_both_way_by_name(ent_name, ent_cp_name, float(prob))
 
 

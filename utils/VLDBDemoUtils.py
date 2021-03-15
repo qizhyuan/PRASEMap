@@ -1,3 +1,4 @@
+from time import strftime, localtime
 import json
 import os
 import random
@@ -92,7 +93,6 @@ def generate_pairs_for_correction(kgs):
     else:
         correction_pair_candidates2 = aligned_pairs.copy()
 
-
     correction_pair_candidates1 = set(correction_pair_candidates1)
     correction_pair_candidates2 = set(correction_pair_candidates2)
 
@@ -104,6 +104,7 @@ def generate_pairs_for_correction(kgs):
 
     correction_set = set((correction_pair_candidates[i][0], correction_pair_candidates[i][1]) for i in correction_index)
     result_list = list()
+
     # result_dict["markingNum"] = len(correction_list)
 
     def generate_node_info(kg, node_id):
@@ -163,7 +164,6 @@ def construct_single_kg_demo_file(kgs, save_path, hop=1, kg1_name="KG1", kg2_nam
 
 
 def construct_single_kg_demo_dict(kg, kg_name="KG1", hop=1):
-
     def calculate_score(kg, ent_id):
         tuples = kg.get_rel_ent_id_tuples_by_ent(ent_id)
         score = float(len(tuples))
@@ -331,20 +331,47 @@ def save_ent_mapping_result(kgs, save_path):
         os.makedirs(base)
 
     with open(save_path, "w", encoding="utf8") as f:
+        f.write("Entity Mappings:" + "\n")
         for (ent, ent_cp, prob) in kgs.get_ent_align_name_result():
             f.write("\t".join([ent, ent_cp, format(prob, ".6f")]) + "\n")
+        f.write("\n")
+        sub_align_result, sup_align_result = kgs.get_rel_align_name_result()
+        f.write("Sub-Relation Mappings:" + "\n")
+        for (rel, rel_cp, prob) in sub_align_result:
+            f.write("\t".join([rel, rel_cp, format(prob, ".6f")]) + "\n")
+        f.write("\n")
+        f.write("Sup-Relation Mappings:" + "\n")
+        for (rel, rel_cp, prob) in sup_align_result:
+            f.write("\t".join([rel, rel_cp, format(prob, ".6f")]) + "\n")
+
+        f.write("\n")
+        sub_align_result, sup_align_result = kgs.get_attr_align_name_result()
+        f.write("Sub-Attribute Mappings:" + "\n")
+        for (attr, attr_cp, prob) in sub_align_result:
+            f.write("\t".join([attr, attr_cp, format(prob, ".6f")]) + "\n")
+        f.write("\n")
+        f.write("Sup-Attribute Mappings:" + "\n")
+        for (attr, attr_cp, prob) in sup_align_result:
+            f.write("\t".join([attr, attr_cp, format(prob, ".6f")]) + "\n")
 
 
 def load_forced_ent_mappings(kgs, load_path):
     if not os.path.exists(load_path):
         return
-
+    load_num = 0
     with open(load_path, "r", encoding="utf8") as f:
         for line in f.readlines():
             line = line.strip()
             if len(line) == 0:
                 continue
+
             ent_name, ent_cp_name, prob = line.split(sep="\t")
-            kgs.insert_forced_ent_eqv_both_way_by_name(ent_name, ent_cp_name, float(prob))
+            success = kgs.insert_forced_ent_eqv_both_way_by_name(ent_name, ent_cp_name, float(prob))
+            if success:
+                load_num += 1
+    kgs.pr.init_loaded_data()
+    print(get_time_str() + "Successfully load " + str(load_num) + " user feedback mappings")
 
 
+def get_time_str():
+    return str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime()))

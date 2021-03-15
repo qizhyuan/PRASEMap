@@ -1,5 +1,7 @@
-from prase import KG
 import prase_core as pc
+import sys
+from prase import KG
+from time import strftime, localtime
 
 
 class KGs:
@@ -34,8 +36,14 @@ class KGs:
 
     def run_se(self, mapping_feedback=True, embedding_feedback=True, **kwargs):
         if self.se is not None:
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Initializing SE module...")
+            sys.stdout.flush()
             self.se.init()
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Training SE module...")
+            sys.stdout.flush()
             self.se.train()
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Deliver feedback to PR module...")
+            sys.stdout.flush()
             self.se.feed_back_to_pr_module(mapping_feedback, embedding_feedback, **kwargs)
 
     def get_entity_nums(self):
@@ -48,7 +56,8 @@ class KGs:
         ent_id = self.kg1.get_ent_id_by_name(ent_name)
         ent_cp_id = self.kg2.get_ent_id_by_name(ent_cp_name)
         if ent_id is None or ent_cp_id is None:
-            print("fail to get ent ids")
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Fail to load feedback entity mapping (" + ent_name + ", " + ent_cp_name + ", " + str(prob) + ")")
+            sys.stdout.flush()
             return
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, True)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, True)
@@ -57,10 +66,13 @@ class KGs:
         ent_id = self.kg1.get_ent_id_by_name(ent_name)
         ent_cp_id = self.kg2.get_ent_id_by_name(ent_cp_name)
         if ent_id is None or ent_cp_id is None:
-            print("fail to get ent ids")
+            # print("fail to get ent ids")
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Fail to load entity mapping (" + ent_name + ", " + ent_cp_name + ", " + str(prob) + ")")
+            sys.stdout.flush()
             return
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
+        return True
 
     def insert_lite_eqv_by_id(self, lite_id, lite_cp_id, prob=None, forced=True):
         if prob is None:
@@ -69,7 +81,7 @@ class KGs:
 
     def insert_ent_eqv_both_way_by_id(self, ent_id, ent_cp_id, prob):
         if ent_id is None or ent_cp_id is None:
-            print("fail to get ent ids")
+            # print("fail to get ent ids")
             return
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)

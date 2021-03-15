@@ -1,7 +1,9 @@
-import time
-from prase import KGs
 import math
 import os
+import time
+import sys
+from time import strftime, localtime
+from prase import KGs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 # import tensorflow as tf
@@ -553,8 +555,11 @@ class GCNAlign:
         neg_num = self.neg_num
         train_num = len(self.ent_training_links)
         if train_num <= 0:
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "No entity mapping from PR module")
             return
 
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Positive instance number: " + str(train_num))
+        sys.stdout.flush()
         train_links = np.array(self.ent_training_links)
         pos = np.ones((train_num, neg_num)) * (train_links[:, 0].reshape((train_num, 1)))
         neg_left = pos.reshape((train_num * neg_num,))
@@ -564,6 +569,7 @@ class GCNAlign:
         neg_right = None
         feed_dict_se = None
         feed_dict_ae = None
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Negative instance number: " + str(train_num * neg_num))
 
         for i in range(1, self.epoch_num + 1):
             start = time.time()
@@ -585,8 +591,12 @@ class GCNAlign:
                                               feed_dict=feed_dict_se)
 
             batch_loss = batch_loss1 + batch_loss2
-            print('epoch {}, average triple loss: {:.4f}, cost time: {:.4f}s'.format(i, batch_loss,
-                                                                                     time.time() - start))
+            log = 'Training, epoch {}, average triple loss {:.4f}, cost time {:.4f} s'.format(i, batch_loss,
+                                                                                     time.time() - start)
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + log)
+            sys.stdout.flush()
+            # print('epoch {}, average triple loss: {:.4f}, cost time: {:.4f}s'.format(i, batch_loss,
+            #                                                                          time.time() - start))
 
         vec_se = self.session.run(self.model_se.outputs, feed_dict=feed_dict_se)
         vec_ae = self.session.run(self.model_ae.outputs, feed_dict=feed_dict_ae)
@@ -597,6 +607,7 @@ class GCNAlign:
     def mapping_feed_back_to_pr(self, beta=0.9, prob=0.95):
         embeddings = np.concatenate([self.vec_se * beta, self.vec_ae * (1.0 - beta)], axis=1)
         if len(self.kg1_test_ent_list) == 0 or len(self.kg2_test_ent_list) == 0:
+            print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Adding 0 entity mappings")
             return
         embeds1 = np.array([embeddings[e] for e in self.kg1_test_ent_list])
         embeds2 = np.array([embeddings[e] for e in self.kg2_test_ent_list])
@@ -610,13 +621,18 @@ class GCNAlign:
 
         self.kgs.se_feedback_pairs.clear()
 
+        mapping_num = 0
         for (kg1_ent, kg2_ent) in kg_matched_pairs:
             kg1_emb_id, kg2_emb_id = self.kg1_test_ent_list[kg1_ent], self.kg2_test_ent_list[kg2_ent]
             kg1_id, kg2_id = self.embed_idx_dict_inv[kg1_emb_id], self.embed_idx_dict_inv[kg2_emb_id]
             self.kgs.se_feedback_pairs.add((kg1_id, kg2_id))
-            if distance[kg1_ent][kg2_ent] < 0.2:
+            if distance[kg1_ent][kg2_ent] > 0.3:
                 continue
-            self.kgs.insert_ent_eqv_both_way_by_id(kg1_id, kg2_id, prob)
+            self.kgs.insert_ent_eqv_both_way_by_id(kg1_id, kg2_id, 1 - distance[kg1_ent][kg2_ent])
+            mapping_num += 1
+        self.kgs.pr.init_loaded_data()
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Successfully adding " + str(mapping_num) + " entity mappings")
+        sys.stdout.flush()
 
     def embedding_feed_back_to_pr(self, beta=0.9):
         embeddings = np.concatenate([self.vec_se * beta, self.vec_ae * (1.0 - beta)], axis=1)
@@ -627,6 +643,9 @@ class GCNAlign:
         for ent in self.kgs.kg2.get_ent_id_set():
             ent_emb_id = self.embed_idx_dict[ent]
             self.kgs.kg2.insert_ent_embed_by_id(ent, embeddings[ent_emb_id, :])
+
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Successfully binding entity embeddings")
+        sys.stdout.flush()
 
     def feed_back_to_pr_module(self, mapping_feedback=True, embedding_feedback=True, beta=0.9, prob=0.95):
         if mapping_feedback:

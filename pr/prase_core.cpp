@@ -459,7 +459,7 @@ public:
     void insert_ongoing_rel_deno(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void insert_ongoing_ent_eqv(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
     void update_rel_eqv_from_ongoing(int);
-    void update_ent_eqv_from_ongoing(bool);
+    void update_ent_eqv_from_ongoing(bool, double);
     void reset_ongoing_mp();
     void init_loaded_data();
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
@@ -478,6 +478,7 @@ private:
     PARISParams *paris_params;
     double get_entity_equiv(uint64_t, uint64_t);
     double get_literal_equiv(uint64_t, uint64_t);
+    void init_unaligned_set();
     static double get_value_from_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t);
     static void insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&, uint64_t, uint64_t, double);
     static std::vector<std::tuple<uint64_t, uint64_t, double>> mp_mp_to_tuple(std::unordered_map<uint64_t, std::unordered_map<uint64_t, double>>&);
@@ -667,7 +668,7 @@ void PARISEquiv::update_rel_eqv_from_ongoing(int norm_const) {
     }
 }
 
-void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
+void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents, double threshold) {
     std::vector<std::tuple<uint64_t, uint64_t, double>> new_ent_eqv_tuples;
     std::unordered_set<uint64_t> visited;
 
@@ -712,6 +713,9 @@ void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
         uint64_t cp_id = std::get<1>(eqv_tuple);
         if (!visited.count(id) && !visited.count(cp_id)) {
             double prob = std::get<2>(eqv_tuple);
+            if (prob < threshold) {
+                continue;
+            }
             update_ent_equiv(id, cp_id, prob);
             update_ent_equiv(cp_id, id, prob);
             ent_eqv_tuples.push_back(eqv_tuple);
@@ -721,28 +725,26 @@ void PARISEquiv::update_ent_eqv_from_ongoing(bool update_unaligned_ents) {
     }
 
     if (update_unaligned_ents) {
-        kg_a_unaligned_ents.clear();
-        kg_b_unaligned_ents.clear();
+        init_unaligned_set();
+    }
 
-        for (auto ent_id : kg_a -> get_ent_set()) {
-            // if (!visited.count(ent_id)) {
-            //     kg_a_unaligned_ents.push_back(ent_id);
-            // }
-            if (!ent_eqv_mp.count(ent_id)) {
-                kg_a_unaligned_ents.push_back(ent_id);
-            }
-        }
+}
 
-        for (auto ent_id : kg_b -> get_ent_set()) {
-            // if (!visited.count(ent_id)) {
-            //     kg_b_unaligned_ents.push_back(ent_id);
-            // }
-            if (!ent_eqv_mp.count(ent_id)) {
-                kg_b_unaligned_ents.push_back(ent_id);
-            }
+void PARISEquiv::init_unaligned_set() {
+    kg_a_unaligned_ents.clear();
+    kg_b_unaligned_ents.clear();
+
+    for (auto ent_id : kg_a -> get_ent_set()) {
+        if (!ent_eqv_mp.count(ent_id)) {
+            kg_a_unaligned_ents.push_back(ent_id);
         }
     }
 
+    for (auto ent_id : kg_b -> get_ent_set()) {
+        if (!ent_eqv_mp.count(ent_id)) {
+            kg_b_unaligned_ents.push_back(ent_id);
+        }
+    }
 }
 
 void PARISEquiv::init_loaded_data() {
@@ -759,6 +761,7 @@ void PARISEquiv::init_loaded_data() {
             ent_eqv_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
         }
     }
+    init_unaligned_set();
 }
 
 void PARISEquiv::reset_ongoing_mp() {
@@ -1268,7 +1271,7 @@ void PRModule::one_iteration() {
 
     // std::cout<<"update_ent_eqv"<<std::endl;
     bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
-    paris_eqv -> update_ent_eqv_from_ongoing(update_unaligned_ents);
+    paris_eqv -> update_ent_eqv_from_ongoing(update_unaligned_ents, paris_params -> ENT_EQV_THRESHOLD);
 
     // std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
     // std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;

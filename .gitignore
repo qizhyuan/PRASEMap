@@ -48,5 +48,6 @@ dependence/
 *.egg-info
 prase/__pycache__/
 se/__pycache__/
+pr/__pycache__/
 *.json
 /test

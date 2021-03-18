@@ -1,7 +1,9 @@
 import argparse
 
 import se
+import pr
 import sys
+import traceback
 import utils.PRASEUtils as pu
 import utils.VLDBDemoUtils as vu
 
@@ -20,7 +22,8 @@ parser.add_argument("--save_emb", action="store_true", default=False, help="enab
 # parser.add_argument("--disable_init_run", action="store_true", default=False, help="disable running pr first for unsupervised initialization")
 
 parser.add_argument("--save_kg_demo_path", type=str, help="save the KG demonstration file to path")
-parser.add_argument("--save_mapping_demo_path", type=str, help="save the entity mapping file to path")
+parser.add_argument("--save_mapping_demo_path", type=str, help="save the mapping demonstration file to path")
+parser.add_argument("--save_feedback_path", type=str, help="save user feedback file to path")
 parser.add_argument("--save_mapping_result_path", type=str, help="save the entity mapping results to path for user download")
 parser.add_argument("--forced_file_path", type=str, help="the path of the file containing forced equivalent entity mappings")
 
@@ -62,6 +65,7 @@ if __name__ == '__main__':
         save_mapping_demo_path = args.save_mapping_demo_path
         save_mapping_result_path = args.save_mapping_result_path
         forced_file_path = args.forced_file_path
+        save_feedback_path = args.save_feedback_path
 
         init_run = load_path is None
 
@@ -77,7 +81,10 @@ if __name__ == '__main__':
 
         print(vu.get_time_str() + "Configure PRASESys...")
         sys.stdout.flush()
-        kgs = pu.construct_kgs(kg1, kg2, se.GCNAlign, epoch_num=100)
+        kgs = pu.construct_kgs(kg1, kg2)
+        kgs.set_se_module(se.GCNAlign)
+        kgs.set_pr_module(pr.PARIS)
+
         kgs.pr.set_worker_num(4)
         kgs.init()
 
@@ -118,10 +125,14 @@ if __name__ == '__main__':
         if save_mapping_demo_path is not None:
             vu.construct_kg_mappings_demo_file(kgs, save_mapping_demo_path)
 
+        if save_feedback_path is not None:
+            vu.generate_pairs_for_correction(kgs, save_feedback_path)
+
         if save_mapping_result_path is not None:
             vu.save_ent_mapping_result(kgs, save_mapping_result_path)
 
         print(vu.get_time_str() + "Task accomplished")
 
     except BaseException:
+        print(traceback.format_exc())
         print(vu.get_time_str() + "Task failed")

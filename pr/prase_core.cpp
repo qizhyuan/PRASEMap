@@ -1321,6 +1321,7 @@ PYBIND11_MODULE(prase_core, m)
     .def("test", &KG::test)
     ;
 
+
     py::class_<PRModule>(m, "PRModule").def(py::init<KG&, KG&>())
     .def("init", &PRModule::init)
     .def("init_loaded_data", &PRModule::init_loaded_data)

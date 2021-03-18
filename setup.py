@@ -8,13 +8,14 @@ def get_extension():
     pybind_path = os.path.join(base, "dependence/pybind11-2.6/include")
     eigen_path = os.path.join(base, "dependence/eigen-3.3.9")
     core_path = os.path.join(base, "pr/prase_core.cpp")
-    prase_core_module = Extension(name='prase_core', sources=[core_path], include_dirs=[pybind_path, eigen_path])
+    prase_core_module = Extension(name='prase_core', sources=[core_path], include_dirs=[pybind_path, eigen_path],
+                                  extra_compile_args=["-std=c++11"])
     return [prase_core_module]
 
 
 setup(name="prase",
       version="0.1.1",
-      packages=["prase", "se"],
+      packages=["prase", "se", "pr"],
       author="qizhyuan",
       author_email="qizhyuan@gmail.com",
       ext_modules=get_extension())

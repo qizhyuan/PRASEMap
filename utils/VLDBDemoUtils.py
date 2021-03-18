@@ -39,6 +39,8 @@ def generate_node_and_edge_sets(kg, cent_node, hop_num, max_edge_num=2):
     visited = dict()
     for ent in entity_set:
         for (rel, tail) in kg.get_rel_ent_id_tuples_by_ent(ent):
+            if kg.is_inv_rel(rel):
+                continue
             if tail in entity_set:
                 if not visited.__contains__((ent, tail)):
                     visited[(ent, tail)] = 0
@@ -80,7 +82,7 @@ def generate_node_info_list(kg, entity_set, entity_id_dict, group=None):
     return node_info_list, entity_id_dict
 
 
-def generate_pairs_for_correction(kgs):
+def generate_pairs_for_correction(kgs, save_path):
     correction_pair_candidates1 = kgs.se_feedback_pairs.copy()
     if len(correction_pair_candidates1) >= 300:
         correction_pair_candidates1 = random.sample(correction_pair_candidates1, 300)
@@ -99,13 +101,11 @@ def generate_pairs_for_correction(kgs):
     correction_pair_candidates = list(correction_pair_candidates1 | correction_pair_candidates2)
     correction_index = range(len(correction_pair_candidates))
 
-    if len(correction_index) > 200:
-        correction_index = random.sample(correction_index, 200)
+    if len(correction_index) > 50:
+        correction_index = random.sample(correction_index, 50)
 
     correction_set = set((correction_pair_candidates[i][0], correction_pair_candidates[i][1]) for i in correction_index)
     result_list = list()
-
-    # result_dict["markingNum"] = len(correction_list)
 
     def generate_node_info(kg, node_id):
         node_info_dict = dict()
@@ -113,6 +113,9 @@ def generate_pairs_for_correction(kgs):
         node_info_dict["nodeName"] = name
         node_info_dict["relations"] = dict()
         node_info_dict["attributes"] = dict()
+        node_info_dict["subGraph"] = dict()
+        sub_graph_dict = node_info_dict["subGraph"]
+
         for (attr, lite) in kg.get_attr_lite_id_tuples_by_ent(node_id):
             attribute = get_abbr_name(kg.get_attr_name_by_id(attr))
             literal = kg.get_lite_name_by_id(lite)
@@ -124,6 +127,25 @@ def generate_pairs_for_correction(kgs):
             relation = get_abbr_name(kg.get_rel_name_by_id(rel))
             entity = get_abbr_name(kg.get_ent_name_by_id(tail))
             node_info_dict["relations"][relation] = entity
+
+        cent_index = node_id
+        cent_name = get_abbr_name(kg.get_ent_name_by_id(cent_index))
+        sub_graph_dict["centerNodeName"] = cent_name
+        sub_graph_dict["centerNodeId"] = None
+        sub_graph_dict["nodes"] = list()
+        sub_graph_dict["edges"] = list()
+        entity_set, triple_set = generate_node_and_edge_sets(kg, cent_index, 1)
+
+        entity_new_id_dict = dict()
+        ent_info_list, entity_new_id_dict = generate_node_info_list(kg, entity_set, entity_new_id_dict)
+
+        edge_info_list = generate_edge_info_list(kg, triple_set, entity_new_id_dict)
+
+        sub_graph_dict["nodes"] = ent_info_list
+        sub_graph_dict["edges"] = edge_info_list
+
+        sub_graph_dict["centerNodeId"] = entity_new_id_dict[cent_index]
+
         return node_info_dict
 
     for (ent, ent_cp) in correction_set:
@@ -131,7 +153,12 @@ def generate_pairs_for_correction(kgs):
         item_dict = {"sourceKG": node_info1, "targetKG": node_info2}
         result_list.append(item_dict)
 
-    return result_list
+    result_dict = dict()
+    result_dict["markingNum"] = len(result_list)
+    result_dict["markingList"] = result_list
+
+    with open(save_path, "w", encoding="utf8") as f:
+        json.dump(result_dict, f, indent=4)
 
 
 def generate_edge_info_list(kg, triple_set, entity_id_dict):
@@ -241,7 +268,7 @@ def construct_kg_mappings_demo_dict(kgs, kg1_name="KG1", kg2_name="KG2", hop=1):
         ent_l, ent_r, prob = x[0], x[1], x[2]
         deg1 = len(kgs.kg1.get_rel_ent_id_tuples_by_ent(ent_l))
         deg2 = len(kgs.kg2.get_rel_ent_id_tuples_by_ent(ent_r))
-        if deg1 + deg2 > 50:
+        if deg1 + deg2 > 35:
             score = prob
         else:
             score = (deg1 + deg2) * prob
@@ -319,9 +346,6 @@ def construct_kg_mappings_demo_dict(kgs, kg1_name="KG1", kg2_name="KG2", hop=1):
 
     construction(demo_dict, hop)
 
-    correction_list = generate_pairs_for_correction(kgs)
-    demo_dict["markingList"] = correction_list
-    demo_dict["info"]["markingNum"] = len(correction_list)
     return demo_dict
 
 

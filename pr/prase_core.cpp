@@ -61,12 +61,12 @@ struct PARISParams {
     double EMB_EQV_TRADE_OFF;
     double INV_FUNCTIONALITY_THRESHOLD;
     int INIT_ITERATION;
-    int ENT_CANDIDATE_NUM;
     int SMOOTH_NORM;
     int THREAD_NUM;
     int MAX_THREAD_NUM;
     int MIN_THREAD_NUM;
     int MAX_ITERATION_NUM;
+    uint64_t ENT_CANDIDATE_NUM;
     uint64_t MAX_EMB_EQV_CACHE_NUM;
     PARISParams();
 };
@@ -832,7 +832,7 @@ public:
     void enable_emb_eqv(bool);
     void set_worker_num(int);
     void set_emb_cache_capacity(uint64_t);
-    void set_ent_candidate_num(int);
+    void set_ent_candidate_num(uint64_t);
     void set_rel_func_bar(double);
     void set_se_trade_off(double);
     void init_loaded_data();
@@ -884,7 +884,7 @@ void PRModule::enable_emb_eqv(bool flag) {
     paris_params -> ENABLE_EMB_EQV = flag;
 }
 
-void PRModule::set_ent_candidate_num(int num) {
+void PRModule::set_ent_candidate_num(uint64_t num) {
     paris_params -> ENT_CANDIDATE_NUM = num;
 }
 

@@ -44,7 +44,7 @@ setup.py
 se/GCNAlign/__pycache__/
 utils/__pycache__/
 model.json
-dependence/
+/dependence
 *.egg-info
 prase/__pycache__/
 se/__pycache__/

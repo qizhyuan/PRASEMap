@@ -1,5 +1,6 @@
 import os
-from setuptools import setup, Extension, find_packages
+
+from setuptools import setup, Extension
 
 
 def get_extension():
@@ -15,7 +16,7 @@ def get_extension():
 
 setup(name="prase",
       version="0.1.1",
-      packages=["prase", "se", "pr"],
+      packages=["prase", "pr", "se"],
       author="qizhyuan",
       author_email="qizhyuan@gmail.com",
       ext_modules=get_extension())

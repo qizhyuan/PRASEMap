@@ -6,7 +6,7 @@ We use C++ and Python to develop an open-source knowledge graph alignment system
 ### Architecture
 The architecture is shown below. 
 
-![](/docs/architecture.png) 
+![](https://github.com/qizhyuan/PRASEMap/blob/58830dd9add8898f1adf39f406f4e87a538e810f/docs/architecture.png) 
 
 There are two core modules in PRASEMap, i.e., Probability Reasoning (PR) Module and Semantic Embedding (SE) Module. PRASEMap absorbs the strengths of both the reasoning-based
 and the embedding-based approaches and can also work in an unsupervised (fully automatic) mode. PRASEMap can also be performed in a semi-automatic mode that allows users to feed mapping annotations back such that the system can eventually output more complete and accurate mappings.

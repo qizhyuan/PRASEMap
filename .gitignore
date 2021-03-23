@@ -33,8 +33,6 @@
 
 *.pyd
 
-setup.py
-
 /build
 /.vscode
 /dist
@@ -50,4 +48,3 @@ prase/__pycache__/
 se/__pycache__/
 pr/__pycache__/
 *.json
-/test

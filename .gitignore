@@ -37,6 +37,7 @@
 /.vscode
 /dist
 /UNKNOWN.egg-info
+/prase.egg-info
 /.idea
 /__pycache__
 se/GCNAlign/__pycache__/

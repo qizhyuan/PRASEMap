@@ -15,8 +15,8 @@ def get_extension():
 
 
 setup(name="prase",
-      version="0.1.1",
-      packages=["prase", "pr", "se"],
+      version="1.0.0",
+      packages=["prase", "pr", "se", "utils"],
       author="qizhyuan",
       author_email="qizhyuan@gmail.com",
       ext_modules=get_extension())

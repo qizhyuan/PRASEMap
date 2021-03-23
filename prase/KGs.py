@@ -104,6 +104,12 @@ class KGs:
     def get_kg2_unaligned_candidate_ids(self):
         return self.pr.get_kg_b_unaligned_ents()
 
+    def get_kg1_unaligned_candidate_name(self):
+        return [self.kg1.get_ent_name_by_id(idx) for idx in self.pr.get_kg_a_unaligned_ents()]
+
+    def get_kg2_unaligned_candidate_name(self):
+        return [self.kg2.get_ent_name_by_id(idx) for idx in self.pr.get_kg_b_unaligned_ents()]
+
     def clear_kgs_ent_embed(self):
         self.kg1.clear_ent_embed()
         self.kg2.clear_ent_embed()
@@ -162,10 +168,6 @@ class KGs:
 
     def set_pr_module(self, pr_module, **kwargs):
         self.pr = pr_module(self, **kwargs)
-
-    # def print_result(self):
-    #     for item in self.pr.get_ent_eqv_result():
-    #         print(item)
 
     def test(self, test_path, threshold=0.0):
         gold_result = set()

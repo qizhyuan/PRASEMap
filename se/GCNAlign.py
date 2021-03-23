@@ -604,7 +604,7 @@ class GCNAlign:
         self.vec_ae = vec_ae
         return vec_se, vec_ae
 
-    def mapping_feed_back_to_pr(self, beta=0.9, prob=0.95):
+    def mapping_feed_back_to_pr(self, beta=0.9):
         embeddings = np.concatenate([self.vec_se * beta, self.vec_ae * (1.0 - beta)], axis=1)
         if len(self.kg1_test_ent_list) == 0 or len(self.kg2_test_ent_list) == 0:
             print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Adding 0 entity mappings")
@@ -647,70 +647,8 @@ class GCNAlign:
         print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Successfully binding entity embeddings")
         sys.stdout.flush()
 
-    def feed_back_to_pr_module(self, mapping_feedback=True, embedding_feedback=True, beta=0.9, prob=0.95):
+    def feed_back_to_pr_module(self, mapping_feedback=True, embedding_feedback=True, beta=0.9):
         if mapping_feedback:
-            self.mapping_feed_back_to_pr(beta, prob)
+            self.mapping_feed_back_to_pr(beta)
         if embedding_feedback:
             self.embedding_feed_back_to_pr(beta)
-
-    # def test(self, beta=0.9):
-    #     vec_se = self.session.run(self.model_se.outputs, feed_dict=self.feed_dict_se)
-    #     vec_ae = self.session.run(self.model_ae.outputs, feed_dict=self.feed_dict_ae)
-    #     embeddings = np.concatenate([vec_se * beta, vec_ae * (1.0 - beta)], axis=1)
-    #     embeds1 = np.array([embeddings[e] for e in self.kg1_ent_emb_id_list])
-    #     embeds2 = np.array([embeddings[e] for e in self.kg2_ent_emb_id_list])
-    #     distance = cdist(embeds1, embeds2, "cityblock")
-    #     kg1_counterpart = np.argmin(distance, axis=1)
-    #     kg2_counterpart = np.argmin(distance, axis=0)
-    #     kg1_matched_pairs = set([(i, kg1_counterpart[i]) for i in range(len(kg1_counterpart))])
-    #
-    #     kg2_matched_pairs = set([(kg2_counterpart[i], i) for i in range(len(kg2_counterpart))])
-    #     kg_matched_pairs = kg1_matched_pairs & kg2_matched_pairs
-    #     kg_matched_set = set()
-    #     for (ent, ent_cp) in kg_matched_pairs:
-    #         kg_matched_set.add((self.kg1_ent_emb_id_list[ent], self.kg2_ent_emb_id_list[ent_cp]))
-    #     train_set = set()
-    #     for i in range(len(self.ent_training_links)):
-    #         train_set.add((self.ent_training_links[i][0], self.ent_training_links[i][1]))
-    #
-    #     if len(kg_matched_pairs) > 0:
-    #         recall = len(train_set & kg_matched_set) / len(train_set)
-    #         precision = len(train_set & kg_matched_set) / len(kg_matched_set)
-    #         print("recall:\t" + str(recall) + "\tprecision:\t" + str(precision))
-    #
-    # def valid(self, beta=0.9, path=None):
-    #     vec_se = self.session.run(self.model_se.outputs, feed_dict=self.feed_dict_se)
-    #     vec_ae = self.session.run(self.model_ae.outputs, feed_dict=self.feed_dict_ae)
-    #     embeddings = np.concatenate([vec_se * beta, vec_ae * (1.0 - beta)], axis=1)
-    #     embeds1 = np.array([embeddings[e] for e in self.kg1_test_ent_list])
-    #     embeds2 = np.array([embeddings[e] for e in self.kg2_test_ent_list])
-    #     distance = cdist(embeds1, embeds2, "cityblock")
-    #     kg1_counterpart = np.argmin(distance, axis=1)
-    #     kg2_counterpart = np.argmin(distance, axis=0)
-    #     kg1_matched_pairs = set([(i, kg1_counterpart[i]) for i in range(len(kg1_counterpart))])
-    #
-    #     kg2_matched_pairs = set([(kg2_counterpart[i], i) for i in range(len(kg2_counterpart))])
-    #     kg_matched_pairs = kg1_matched_pairs & kg2_matched_pairs
-    #     kg_matched_set = set()
-    #     for (ent, ent_cp) in kg_matched_pairs:
-    #         kg_matched_set.add((self.kg1_test_ent_list[ent], self.kg2_test_ent_list[ent_cp]))
-    #     valid_set = set()
-    #     with open(path, "r", encoding="utf8") as f:
-    #         for line in f.readlines():
-    #             params = str.strip(line).split("\t")
-    #             ent_l, ent_r = params[0].strip(), params[1].strip()
-    #             obj_l, obj_r = self.kgs.kg1.get_ent_id_without_insert(ent_l), self.kgs.kg2.get_ent_id_without_insert(
-    #                 ent_r)
-    #             if obj_l is None:
-    #                 print("Exception: fail to load Entity (" + ent_l + ")")
-    #             if obj_r is None:
-    #                 print("Exception: fail to load Entity (" + ent_r + ")")
-    #             if obj_l is None or obj_r is None:
-    #                 continue
-    #             if obj_l in self.kgs.get_kg1_unaligned_candidates() and obj_r in self.kgs.get_kg2_unaligned_candidates():
-    #                 valid_set.add((self.embed_idx_dict[obj_l], self.embed_idx_dict[obj_r]))
-    #
-    #     if len(kg_matched_pairs) > 0:
-    #         recall = len(valid_set & kg_matched_set) / len(valid_set)
-    #         precision = len(valid_set & kg_matched_set) / len(kg_matched_set)
-    #         print("recall:\t" + str(recall) + "\tprecision:\t" + str(precision))

@@ -53,7 +53,6 @@ struct PARISParams {
     double REL_EQV_THRESHOLD;
     double REL_EQV_FACTOR_THRESHOLD;
     double REL_INIT_EQV;
-    double INIT_REL_EQV_PROB;
     double HIGH_CONF_THRESHOLD;
     double OUTPUT_THRESHOLD;
     double PENALTY_VALUE;
@@ -77,7 +76,6 @@ PARISParams::PARISParams() {
     REL_EQV_THRESHOLD = 0.1;
     REL_EQV_FACTOR_THRESHOLD = 0.01;
     REL_INIT_EQV = 0.1;
-    INIT_REL_EQV_PROB = 0.1;
     HIGH_CONF_THRESHOLD = 0.9;
     OUTPUT_THRESHOLD = 0.1;
     PENALTY_VALUE = 1.01;
@@ -834,6 +832,8 @@ public:
     void set_emb_cache_capacity(uint64_t);
     void set_ent_candidate_num(uint64_t);
     void set_rel_func_bar(double);
+    void set_ent_eqv_bar(double);
+    void set_rel_eqv_bar(double);
     void set_se_trade_off(double);
     void init_loaded_data();
     void init();
@@ -894,6 +894,14 @@ void PRModule::set_se_trade_off(double trade_off) {
 
 void PRModule::set_rel_func_bar(double threshold) {
     paris_params -> INV_FUNCTIONALITY_THRESHOLD = threshold;
+}
+
+void PRModule::set_ent_eqv_bar(double threshold) {
+    paris_params -> ENT_EQV_THRESHOLD = threshold;
+}
+
+void PRModule::set_rel_eqv_bar(double threshold) {
+    paris_params -> REL_EQV_THRESHOLD = threshold;
 }
 
 std::vector<uint64_t>& PRModule::get_kg_a_unaligned_ents() {
@@ -1030,8 +1038,8 @@ void PRModule::one_iteration_one_way_per_thread(PRModule* _this, std::queue<uint
 
         if (rel_eqv_sub < _this -> paris_params -> REL_EQV_THRESHOLD && rel_eqv_sup < _this -> paris_params -> REL_EQV_THRESHOLD) {
             if (_this -> is_rel_init()) {
-                rel_eqv_sup = _this -> paris_params -> REL_EQV_THRESHOLD;
-                rel_eqv_sub = _this -> paris_params -> REL_EQV_THRESHOLD;
+                rel_eqv_sup = _this -> paris_params -> REL_INIT_EQV;
+                rel_eqv_sub = _this -> paris_params -> REL_INIT_EQV;
             } else {
                 return;
             }
@@ -1334,6 +1342,8 @@ PYBIND11_MODULE(prase_core, m)
     .def("set_se_trade_off", &PRModule::set_se_trade_off)
     .def("set_ent_candidate_num", &PRModule::set_ent_candidate_num)
     .def("set_rel_func_bar", &PRModule::set_rel_func_bar)
+    .def("set_ent_eqv_bar", &PRModule::set_ent_eqv_bar)
+    .def("set_rel_eqv_bar", &PRModule::set_rel_eqv_bar)
     .def("reset_emb_eqv", &PRModule::reset_emb_eqv)
     .def("enable_rel_init", &PRModule::enable_rel_init)
     .def("enable_emb_eqv", &PRModule::enable_emb_eqv)

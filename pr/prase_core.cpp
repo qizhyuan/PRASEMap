@@ -459,7 +459,7 @@ public:
     void update_rel_eqv_from_ongoing(int);
     void update_ent_eqv_from_ongoing(bool, double);
     void reset_ongoing_mp();
-    void init_loaded_data();
+    void init_loaded_data(double);
     std::vector<std::tuple<uint64_t, uint64_t, double>>& get_ent_eqv_result();
     std::vector<std::tuple<uint64_t, uint64_t, double>> get_rel_eqv_result();
     std::vector<std::tuple<uint64_t, uint64_t, double>> get_forced_eqv_result();
@@ -745,8 +745,10 @@ void PARISEquiv::init_unaligned_set() {
     }
 }
 
-void PARISEquiv::init_loaded_data() {
-    ent_eqv_tuples.clear();
+void PARISEquiv::init_loaded_data(double threshold) {
+    std::vector<std::tuple<uint64_t, uint64_t, double>> new_ent_eqv_tuples;
+    std::unordered_set<uint64_t> visited;
+    
     for (auto iter = ent_eqv_mp.begin(); iter != ent_eqv_mp.end(); ++iter) {
         uint64_t id = iter -> first;
         if (!kg_a -> get_ent_set().count(id)) {
@@ -756,9 +758,36 @@ void PARISEquiv::init_loaded_data() {
         for (auto sub_iter = cp_map.begin(); sub_iter != cp_map.end(); ++sub_iter) {
             uint64_t cp_id = sub_iter -> first;
             double prob = sub_iter -> second;
-            ent_eqv_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
+            new_ent_eqv_tuples.emplace_back(std::make_tuple(id, cp_id, prob));
         }
     }
+
+    std::function<bool(std::tuple<uint64_t, uint64_t, double>&, std::tuple<uint64_t, uint64_t, double>&)> eqv_comp = 
+    [](std::tuple<uint64_t, uint64_t, double>& a, std::tuple<uint64_t, uint64_t, double>& b) {
+        return std::get<2>(a) > std::get<2>(b);
+    };
+
+    std::sort(new_ent_eqv_tuples.begin(), new_ent_eqv_tuples.end(), eqv_comp);
+
+    ent_eqv_mp.clear();
+    ent_eqv_tuples.clear();
+
+    for (auto &eqv_tuple : new_ent_eqv_tuples) {
+        uint64_t id = std::get<0>(eqv_tuple);
+        uint64_t cp_id = std::get<1>(eqv_tuple);
+        if (!visited.count(id) && !visited.count(cp_id)) {
+            double prob = std::get<2>(eqv_tuple);
+            if (prob < threshold) {
+                continue;
+            }
+            update_ent_equiv(id, cp_id, prob);
+            update_ent_equiv(cp_id, id, prob);
+            ent_eqv_tuples.push_back(eqv_tuple);
+            visited.insert(id);
+            visited.insert(cp_id);
+        }
+    }
+
     init_unaligned_set();
 }
 
@@ -920,7 +949,7 @@ void PRModule::init() {
 }
 
 void PRModule::init_loaded_data() {
-    paris_eqv -> init_loaded_data();
+    paris_eqv -> init_loaded_data(paris_params -> ENT_EQV_THRESHOLD);
 }
 
 void PRModule::reset_emb_eqv() {
@@ -936,23 +965,29 @@ void PRModule::insert_value_to_mp_mp(std::unordered_map<uint64_t, std::unordered
 }
 
 void PRModule::update_ent_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> update_ent_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
+    } else {
+        prob = get_filtered_prob(id_a, id_b, prob);
+        paris_eqv -> update_ent_equiv(id_a, id_b, prob);
     }
 }
 
 void PRModule::update_lite_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> update_lite_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
+    } else {
+        prob = get_filtered_prob(id_a, id_b, prob);
+        paris_eqv -> update_lite_equiv(id_a, id_b, prob);
     }
 }
 
 void PRModule::update_rel_eqv(uint64_t id_a, uint64_t id_b, double prob, bool forced) {
-    paris_eqv -> update_rel_equiv(id_a, id_b, prob);
     if (forced) {
         insert_value_to_mp_mp(this -> paris_eqv -> get_forced_eqv_mp(), id_a, id_b, prob);
+    } else {
+        prob = get_filtered_prob(id_a, id_b, prob);
+        paris_eqv -> update_rel_equiv(id_a, id_b, prob);
     }
 }
 
@@ -1266,31 +1301,19 @@ void PRModule::one_iteration() {
         for (uint64_t ent : ents) {
             ent_queue.push(ent);
         }
-        // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     };
 
-    // std::cout<<"iteration num: "<<iteration<<std::endl;
 
-    // std::cout<<"one_iteration_one_way"<<std::endl;
     set_ent_queue(kg_a);
-    // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
     one_iteration_one_way(ent_queue, kg_a, kg_b, true);
 
-
-    // std::cout<<"update_ent_eqv"<<std::endl;
     bool update_unaligned_ents = iteration == paris_params -> MAX_ITERATION_NUM;
     paris_eqv -> update_ent_eqv_from_ongoing(update_unaligned_ents, paris_params -> ENT_EQV_THRESHOLD);
 
-    // std::cout<<"ent align num: "<<paris_eqv -> get_ent_eqv_result().size()<<std::endl;
-    // std::cout<<"lite align num: "<<paris_eqv -> get_lite_eqv_mp().size()<<std::endl;
-
     set_ent_queue(kg_b);
-    // std::cout<<"queue size: "<<ent_queue.size()<<std::endl;
 
-    // std::cout<<"one_iteration_one_way"<<std::endl;
     one_iteration_one_way(ent_queue, kg_b, kg_a, false);
 
-    // std::cout<<"update_rel_eqv"<<std::endl;
     paris_eqv -> update_rel_eqv_from_ongoing(paris_params -> SMOOTH_NORM);
 
 }

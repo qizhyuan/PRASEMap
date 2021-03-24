@@ -551,6 +551,15 @@ class GCNAlign:
         self._load_data()
         self._init_model()
 
+    def _generate_neg_list_from_feedback(self):
+        neg_list = list()
+        for (ent1, ent2, prob) in self.kgs.get_inserted_forced_mappings():
+            if prob > 0.5:
+                continue
+            idx1, idx2 = self.embed_idx_dict[ent1], self.embed_idx_dict[ent2]
+            neg_list.append([idx1, idx2])
+        return neg_list
+
     def train(self):
         neg_num = self.neg_num
         train_num = len(self.ent_training_links)
@@ -565,6 +574,20 @@ class GCNAlign:
         neg_left = pos.reshape((train_num * neg_num,))
         pos = np.ones((train_num, neg_num)) * (train_links[:, 1].reshape((train_num, 1)))
         neg2_right = pos.reshape((train_num * neg_num,))
+
+        neg_list = self._generate_neg_list_from_feedback()
+        neg_left_append, neg_right_append = None, None
+        if len(neg_list) > 0:
+            neg_links = np.array(neg_list)
+            neg_left_append = neg_links[:, 0].reshape((-1, 1))
+            neg_right_append = neg_links[:, 1].reshape((-1, 1))
+
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Feedback negative instance number: " + str(len(neg_list)))
+
+        if neg_left_append is not None and neg_right_append is not None:
+            neg_left = np.vstack(neg_left, neg_left_append)
+            neg2_right = np.vstack(neg2_right, neg_right_append)
+
         neg2_left = None
         neg_right = None
         feed_dict_se = None
@@ -576,6 +599,9 @@ class GCNAlign:
             if i % 10 == 1:
                 neg2_left = np.random.choice(self.se_input_dim, train_num * neg_num)
                 neg_right = np.random.choice(self.se_input_dim, train_num * neg_num)
+                if neg_left_append is not None and neg_right_append is not None:
+                    neg2_left = np.vstack(neg2_left, neg_left_append)
+                    neg_right = np.vstack(neg_right, neg_right_append)
 
             feed_dict_ae = construct_feed_dict(self.ae_input, self.support, self.ph_ae)
             feed_dict_ae.update({self.ph_ae['dropout']: self.dropout})

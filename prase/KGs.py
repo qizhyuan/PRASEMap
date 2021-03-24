@@ -61,9 +61,10 @@ class KGs:
         if ent_id is None or ent_cp_id is None:
             print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Fail to load feedback entity mapping (" + ent_name + ", " + ent_cp_name + ", " + str(prob) + ")")
             sys.stdout.flush()
-            return
+            return False
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, True)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, True)
+        return True
 
     def insert_ent_eqv_both_way_by_name(self, ent_name, ent_cp_name, prob):
         ent_id = self.kg1.get_ent_id_by_name(ent_name)
@@ -72,7 +73,7 @@ class KGs:
             # print("fail to get ent ids")
             print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Fail to load entity mapping (" + ent_name + ", " + ent_cp_name + ", " + str(prob) + ")")
             sys.stdout.flush()
-            return
+            return False
         self.pr.update_ent_eqv(ent_id, ent_cp_id, prob, False)
         self.pr.update_ent_eqv(ent_cp_id, ent_id, prob, False)
         return True

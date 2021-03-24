@@ -2,6 +2,7 @@ import math
 import os
 import time
 import sys
+import random
 from time import strftime, localtime
 from prase import KGs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -130,13 +131,14 @@ def align_loss(outlayer, ILL, gamma, k):
 
     neg_left = get_placeholder_by_name("neg_left")
     neg_right = get_placeholder_by_name("neg_right")
+    
     neg_l_x = tf.nn.embedding_lookup(outlayer, neg_left)
     neg_r_x = tf.nn.embedding_lookup(outlayer, neg_right)
     B = tf.reduce_sum(tf.abs(neg_l_x - neg_r_x), 1)
     C = - tf.reshape(B, [t, k])
     D = A + gamma
 
-    L1 = tf.nn.relu(tf.add(C, tf.reshape(D, [t, 1])))
+    L1 = tf.reshape(tf.nn.relu(tf.add(C, tf.reshape(D, [t, 1]))), [k * t, 1])
 
     neg_left = get_placeholder_by_name("neg2_left")
     neg_right = get_placeholder_by_name("neg2_right")
@@ -144,8 +146,24 @@ def align_loss(outlayer, ILL, gamma, k):
     neg_r_x = tf.nn.embedding_lookup(outlayer, neg_right)
     B = tf.reduce_sum(tf.abs(neg_l_x - neg_r_x), 1)
     C = - tf.reshape(B, [t, k])
-    L2 = tf.nn.relu(tf.add(C, tf.reshape(D, [t, 1])))
-    return (tf.reduce_sum(L1) + tf.reduce_sum(L2)) / (2.0 * k * t)
+    L2 = tf.reshape(tf.nn.relu(tf.add(C, tf.reshape(D, [t, 1]))), [k * t, 1])
+
+    neg_feedback_left = get_placeholder_by_name("feedback_neg_left")
+    neg_feedback_right = get_placeholder_by_name("feedback_neg_right")
+    pos_feedback_left = get_placeholder_by_name("feedback_pos_left")
+    pos_feedback_right = get_placeholder_by_name("feedback_pos_right")
+    pos_f_l = tf.nn.embedding_lookup(outlayer, pos_feedback_left)
+    pos_f_r = tf.nn.embedding_lookup(outlayer, pos_feedback_right)
+    A2 = tf.reduce_sum(tf.abs(pos_f_l - pos_f_r), 1, keep_dims=True)
+    neg_f_l = tf.nn.embedding_lookup(outlayer, neg_feedback_left)
+    neg_f_r = tf.nn.embedding_lookup(outlayer, neg_feedback_right)
+    B2 = -tf.reduce_sum(tf.abs(neg_f_l - neg_f_r), 1, keep_dims=True)
+    D2 = A2 + gamma
+    L3 = tf.nn.relu(tf.add(B2, D2))
+    
+    L = tf.concat([L1, L2, L3], axis=0)
+    
+    return tf.reduce_mean(L)
 
 
 class Layer(object):
@@ -576,32 +594,28 @@ class GCNAlign:
         neg2_right = pos.reshape((train_num * neg_num,))
 
         neg_list = self._generate_neg_list_from_feedback()
-        neg_left_append, neg_right_append = None, None
+
         if len(neg_list) > 0:
             neg_links = np.array(neg_list)
-            neg_left_append = neg_links[:, 0].reshape((-1, 1))
-            neg_right_append = neg_links[:, 1].reshape((-1, 1))
+            neg_left_append = neg_links[:, 0].reshape((len(neg_list), ))
+            neg_right_append = neg_links[:, 1].reshape((len(neg_list), ))
+        else:
+            neg_left_append = np.empty(shape=(0, ))
+            neg_right_append = np.empty(shape=(0, ))
 
         print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Feedback negative instance number: " + str(len(neg_list)))
-
-        if neg_left_append is not None and neg_right_append is not None:
-            neg_left = np.vstack(neg_left, neg_left_append)
-            neg2_right = np.vstack(neg2_right, neg_right_append)
 
         neg2_left = None
         neg_right = None
         feed_dict_se = None
         feed_dict_ae = None
-        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Negative instance number: " + str(train_num * neg_num))
+        print(str(strftime("[%Y-%m-%d %H:%M:%S]: ", localtime())) + "Negative instance number: " + str(len(neg_left)))
 
         for i in range(1, self.epoch_num + 1):
             start = time.time()
             if i % 10 == 1:
                 neg2_left = np.random.choice(self.se_input_dim, train_num * neg_num)
                 neg_right = np.random.choice(self.se_input_dim, train_num * neg_num)
-                if neg_left_append is not None and neg_right_append is not None:
-                    neg2_left = np.vstack(neg2_left, neg_left_append)
-                    neg_right = np.vstack(neg_right, neg_right_append)
 
             feed_dict_ae = construct_feed_dict(self.ae_input, self.support, self.ph_ae)
             feed_dict_ae.update({self.ph_ae['dropout']: self.dropout})
@@ -611,11 +625,25 @@ class GCNAlign:
             feed_dict_se.update({self.ph_se['dropout']: self.dropout})
             feed_dict_se.update({'neg_left:0': neg_left, 'neg_right:0': neg_right,
                                  'neg2_left:0': neg2_left, 'neg2_right:0': neg2_right})
+
+            if len(neg_list) > 0:
+                pos_append = np.array(random.choices(self.ent_training_links, k=len(neg_list)))
+                pos_left_append = pos_append[:, 0].reshape((len(neg_list), ))
+                pos_right_append = pos_append[:, 1].reshape((len(neg_list),))
+            else:
+                pos_left_append = np.empty(shape=(0,))
+                pos_right_append = np.empty(shape=(0,))
+
+            feed_dict_ae.update({'feedback_pos_left:0': pos_left_append, 'feedback_pos_right:0': pos_right_append})
+            feed_dict_ae.update({'feedback_neg_left:0': neg_left_append, 'feedback_neg_right:0': neg_right_append})
+            feed_dict_se.update({'feedback_pos_left:0': pos_left_append, 'feedback_pos_right:0': pos_right_append})
+            feed_dict_se.update({'feedback_neg_left:0': neg_left_append, 'feedback_neg_right:0': neg_right_append})
+                    
             batch_loss1, _ = self.session.run(fetches=[self.model_ae.loss, self.model_ae.opt_op],
                                               feed_dict=feed_dict_ae)
             batch_loss2, _ = self.session.run(fetches=[self.model_se.loss, self.model_se.opt_op],
                                               feed_dict=feed_dict_se)
-
+            
             batch_loss = batch_loss1 + batch_loss2
             log = 'Training, epoch {}, average triple loss {:.4f}, cost time {:.4f} s'.format(i, batch_loss,
                                                                                      time.time() - start)

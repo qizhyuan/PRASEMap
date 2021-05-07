@@ -100,7 +100,7 @@ The test package contains a simple example test script for evaluating PRASEMap o
 For more configuations and functions of the PR module, please refer to pr/PARIS.py for details.
 
 ### Using External Libraries
-PRASEMap is compatible to different embedding-based KG alignment approaches if they can output entity embeddings and entity mappings. Users can design and implement their SE module in se package. Users can also easily adopt other embedding-based implementations from external libraries, such as [OpenEA](https://github.com/nju-websoft/OpenEA "OpenEA"), or develop their own embedding-based KG alignment approaches. You can use the following steps to adopt other embedding-based approach into PRASEMap.
+PRASEMap is compatible to different embedding-based KG alignment approaches if they can output entity embeddings and entity mappings. Users can design and implement their SE module in se package. Users can also easily adopt other embedding-based implementations from external libraries, such as [OpenEA](https://github.com/nju-websoft/OpenEA "OpenEA"), or develop their own embedding-based KG alignment approaches. You can use the following steps to adopt other embedding-based approaches into PRASEMap.
 
 - Construct KG and KGs objects, and then run PR module.
 - Get the aligned mappings and unaligned mappings via get\_ent\_align\_name\_result(), get\_kg1\_unaligned\_candidate\_name(), and get\_kg2\_unaligned\_candidate\_name() of KGs. Use these to construct seed mappings and test data.

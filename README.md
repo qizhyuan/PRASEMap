@@ -1,6 +1,7 @@
 # PRASEMap 
 A Probability Reasoning and Semantic Embedding-based Knowledge Graph Alignment System
 
+The online demonstration is available at https://prasemap.qizhy.com/ 
 ## Overview
 We use C++ and Python to develop an open-source knowledge graph alignment system termed PRASEMap. 
 ### Architecture

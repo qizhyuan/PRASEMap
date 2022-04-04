@@ -1,7 +1,13 @@
 # PRASEMap 
 A Probability Reasoning and Semantic Embedding-based Knowledge Graph Alignment System
 
-The online demonstration is available at https://prasemap.qizhy.com/ 
+The online demonstration is available at https://prasemap.qizhy.com/, which is also accepted by CIKM 2021. 
+
+Z. Qi, Z. Zhang, et al., "[PRASEMap: A probabilistic reasoning and semantic embedding based knowledge graph alignment
+system](https://dl.acm.org/doi/abs/10.1145/3459637.3481972 "PRASEMap: A probabilistic reasoning and semantic embedding based knowledge graph alignment
+system")," in Proceedings of the 30th ACM International Conference on Information & Knowledge Management (CIKM), 2021,
+pp. 4779–4783.
+
 ## Overview
 We use C++ and Python to develop an open-source knowledge graph alignment system termed PRASEMap. 
 ### Architecture

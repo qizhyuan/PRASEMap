@@ -1,16 +1,43 @@
-# PRASEMap 
-A Probability Reasoning and Semantic Embedding-based Knowledge Graph Alignment System
+# PRASEMap
 
-The online demonstration is available at https://prasemap.qizhy.com/, which is also accepted by CIKM 2021. 
+A Probabilistic Reasoning and Semantic Embedding based Knowledge Graph Alignment System
+([Qi et al., CIKM 2021](https://doi.org/10.1145/3459637.3481972)).
 
-Z. Qi, Z. Zhang, et al., "[PRASEMap: A probabilistic reasoning and semantic embedding based knowledge graph alignment
-system](https://dl.acm.org/doi/abs/10.1145/3459637.3481972 "PRASEMap: A probabilistic reasoning and semantic embedding based knowledge graph alignment
-system")," in Proceedings of the 30th ACM International Conference on Information & Knowledge Management (CIKM), 2021,
-pp. 4779–4783.
+> [!IMPORTANT]
+> The alignment engine of PRASEMap is now developed in **[PRASE](https://github.com/qizhyuan/PRASE)**.
+> To align knowledge graphs in Python or from the command line, please use PRASE. It provides PARIS with
+> C++ and NumPy engines, six embedding models in PyTorch, manual review, and the benchmark recipes.
+> This repository keeps the original 2021 code for reference and is no longer maintained.
 
-## Overview
+- **Engine:** https://github.com/qizhyuan/PRASE
+- **Online demo:** https://prasemap.qizhy.com/
+
+## Citation
+
+Z. Qi, Z. Zhang, J. Chen, X. Chen, and Y. Zheng, "PRASEMap: A Probabilistic Reasoning and Semantic Embedding
+based Knowledge Graph Alignment System," in *Proceedings of the 30th ACM International Conference on Information
+& Knowledge Management (CIKM)*, 2021, pp. 4779–4783.
+
+```bibtex
+@inproceedings{qi2021prasemap,
+  title     = {{PRASEMap}: A Probabilistic Reasoning and Semantic Embedding based Knowledge Graph Alignment System},
+  author    = {Qi, Zhiyuan and Zhang, Ziheng and Chen, Jiaoyan and Chen, Xi and Zheng, Yefeng},
+  booktitle = {Proceedings of the 30th ACM International Conference on Information \& Knowledge Management},
+  publisher = {Association for Computing Machinery},
+  pages     = {4779--4783},
+  year      = {2021},
+  doi       = {10.1145/3459637.3481972},
+  url       = {https://doi.org/10.1145/3459637.3481972}
+}
+```
+
+## Original Implementation (2021)
+
+The sections below describe the code in this repository as released in 2021.
+
+### Overview
 We use C++ and Python to develop an open-source knowledge graph alignment system termed PRASEMap. 
-### Architecture
+#### Architecture
 The architecture is shown below. 
 
 ![](https://github.com/qizhyuan/PRASEMap/blob/58830dd9add8898f1adf39f406f4e87a538e810f/docs/architecture.png) 
@@ -18,7 +45,7 @@ The architecture is shown below.
 There are two core modules in PRASEMap, i.e., Probability Reasoning (PR) Module and Semantic Embedding (SE) Module. PRASEMap absorbs the strengths of both the reasoning-based
 and the embedding-based approaches and can also work in an unsupervised (fully automatic) mode. PRASEMap can also be performed in a semi-automatic mode that allows users to feed mapping annotations back such that the system can eventually output more complete and accurate mappings.
 
-### Package
+#### Package
 The packages of PRASEMap is presented below. 
 
 	├─PRASEMap
@@ -38,7 +65,7 @@ The prase package contains the KG/KGs classes used to wrap and manipulate KG/KGs
 
 The utils package contains several utilities (e.g., construct a KG object from file, save or load a PRASEMap model).
 
-### PR and SE Modules
+#### PR and SE Modules
 *The PR module has integrated the following reasoning-based systems:*
 
 **PARIS:** PARIS: Probabilistic Alignment of Relations, Instances, and Schema. VLDB 2012.
@@ -48,10 +75,10 @@ The utils package contains several utilities (e.g., construct a KG object from f
 **GCNAlign** Cross-lingual Knowledge Graph Alignment via Graph Convolutional Networks. EMNLP 2018.
 
 
-## Installation
+### Installation
 To install PRASEMap, you should install the following dependencies.
 
-### Dependencies
+#### Dependencies
 To install the C++ libaray of PRASEMap, you should first download the C++ libraies that PRASEMap relies on.
 
 - PyBind11: [https://github.com/pybind/pybind11](https://github.com/pybind/pybind11 "https://github.com/pybind/pybind11")
@@ -60,20 +87,20 @@ To install the C++ libaray of PRASEMap, you should first download the C++ librai
 
 Revise the pybind\_path and the eigen\_path in the file setup.py accordingly.
 
-##### Other Dependencies
+###### Other Dependencies
 
 - Python 3.x
 - TensorFlow 2.x
 - Scipy
 - Numpy
 
-### Install
+#### Install
 	python setup.py install
 
 If there is a failure during compilation, please check the version of your C++ compiler. See the **Supported compilers** Section of [PyBind11](https://github.com/pybind/pybind11 "PyBind11").
 
 
-## Usage
+### Usage
 The pipline of PRASEMap is presented as follows.
 
 - **[Step 1. Initialization]** Parse the KG files and constructs two KG objects that contain standardized relation and attribute triples.
@@ -105,7 +132,7 @@ The test package contains a simple example test script for evaluating PRASEMap o
 
 For more configuations and functions of the PR module, please refer to pr/PARIS.py for details.
 
-### Using External Libraries
+#### Using External Libraries
 PRASEMap is compatible to different embedding-based KG alignment approaches if they can output entity embeddings and entity mappings. Users can design and implement their SE module in se package. Users can also easily adopt other embedding-based implementations from external libraries, such as [OpenEA](https://github.com/nju-websoft/OpenEA "OpenEA"), or develop their own embedding-based KG alignment approaches. You can use the following steps to adopt other embedding-based approaches into PRASEMap.
 
 - Construct KG and KGs objects, and then run PR module.
